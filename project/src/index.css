@@ -1,0 +1,173 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg: #F8F7F2;
+    --surface: #FFFFFF;
+    --primary: #2E7D32;
+    --primary-hover: #1B5E20;
+    --secondary: #6B8E23;
+    --accent: #D4A017;
+    --text: #2B2B2B;
+    --text-muted: #6B7280;
+    --border: #E5E7EB;
+    --success: #4CAF50;
+    --error: #E53935;
+    --card-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+    --card-shadow-hover: 0 4px 16px rgba(0,0,0,0.12);
+  }
+
+  .dark {
+    --bg: #121212;
+    --surface: #1E1E1E;
+    --primary: #4CAF50;
+    --primary-hover: #66BB6A;
+    --secondary: #8BC34A;
+    --accent: #FFC107;
+    --text: #F5F5F5;
+    --text-muted: #9CA3AF;
+    --border: #303030;
+    --success: #66BB6A;
+    --error: #EF5350;
+    --card-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    --card-shadow-hover: 0 4px 16px rgba(0,0,0,0.5);
+  }
+
+  html {
+    background-color: var(--bg);
+    color: var(--text);
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  * {
+    @apply transition-colors duration-200;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 rounded-lg font-semibold text-white text-sm transition-all duration-200 active:scale-95;
+    background-color: var(--primary);
+  }
+  .btn-primary:hover { background-color: var(--primary-hover); }
+
+  .btn-ghost {
+    @apply px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 active:scale-95;
+    color: var(--text);
+    border: 1px solid var(--border);
+    background: transparent;
+  }
+  .btn-ghost:hover { background-color: var(--border); }
+
+  .card {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--card-shadow);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+  }
+  .card:hover { box-shadow: var(--card-shadow-hover); }
+
+  .input-field {
+    @apply w-full px-3 py-2 rounded-lg text-sm outline-none transition-all duration-200;
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .input-field:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent); }
+
+  .tab-btn {
+    @apply px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200;
+    color: var(--text-muted);
+  }
+  .tab-btn.active {
+    background-color: var(--primary);
+    color: white;
+  }
+  .tab-btn:not(.active):hover {
+    background-color: var(--border);
+    color: var(--text);
+  }
+
+  .badge-pending {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold;
+    background-color: color-mix(in srgb, #D4A017 15%, transparent);
+    color: #92650a;
+  }
+  .dark .badge-pending {
+    background-color: color-mix(in srgb, #FFC107 20%, transparent);
+    color: #FFC107;
+  }
+  .badge-approved {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold;
+    background-color: color-mix(in srgb, #4CAF50 15%, transparent);
+    color: #1B5E20;
+  }
+  .dark .badge-approved {
+    background-color: color-mix(in srgb, #66BB6A 20%, transparent);
+    color: #66BB6A;
+  }
+  .badge-rejected {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold;
+    background-color: color-mix(in srgb, #E53935 15%, transparent);
+    color: #B71C1C;
+  }
+  .dark .badge-rejected {
+    background-color: color-mix(in srgb, #EF5350 20%, transparent);
+    color: #EF5350;
+  }
+  .badge-completed {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold;
+    background-color: color-mix(in srgb, #6B8E23 15%, transparent);
+    color: #3B5323;
+  }
+  .dark .badge-completed {
+    background-color: color-mix(in srgb, #8BC34A 20%, transparent);
+    color: #8BC34A;
+  }
+
+  .modal-overlay {
+    @apply fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4;
+    background-color: rgba(0,0,0,0.5);
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.15s ease-out;
+  }
+
+  .modal-panel {
+    @apply w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[92vh] overflow-y-auto;
+    background-color: var(--surface);
+    animation: slideUp 0.25s ease-out;
+  }
+
+  .input-field-auto {
+    @apply px-3 py-2 rounded-lg text-sm outline-none transition-all duration-200 cursor-pointer;
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .input-field-auto:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent); }
+  .input-field-auto:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+@layer utilities {
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-fade-in { animation: fadeIn 0.2s ease-out; }
+  .animate-slide-up { animation: slideUp 0.3s ease-out; }
+}
