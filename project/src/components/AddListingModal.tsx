@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { X, Package, AlertCircle, Plus } from 'lucide-react';
+import { X, Package, AlertCircle, Plus, Loader2 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { DEFAULT_CATEGORIES } from '@/data/regions';
 import RegionProvinceSelector from '@/components/RegionProvinceSelector';
 
 interface AddListingModalProps {
@@ -10,7 +9,7 @@ interface AddListingModalProps {
 }
 
 export default function AddListingModal({ open, onClose }: AddListingModalProps) {
-  const { state, dispatch, currentUser } = useApp();
+  const { categories, createListing, addCustomCategory, currentUser } = useApp();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('Poultry');
   const [isCustom, setIsCustom] = useState(false);
@@ -23,8 +22,9 @@ export default function AddListingModal({ open, onClose }: AddListingModalProps)
   const [description, setDescription] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const allCategories = [...DEFAULT_CATEGORIES, ...state.customCategories];
+  const allCategories = categories;
 
   useEffect(() => {
     if (open) {
@@ -40,6 +40,7 @@ export default function AddListingModal({ open, onClose }: AddListingModalProps)
       setDescription('');
       setErrors({});
       setDone(false);
+      setSubmitting(false);
     }
   }, [open, currentUser]);
 
@@ -61,29 +62,30 @@ export default function AddListingModal({ open, onClose }: AddListingModalProps)
     return Object.keys(e).length === 0;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validate() || !currentUser) return;
+    setSubmitting(true);
     const finalCategory = isCustom ? customCategory.trim() : category;
     const qtyNum = parseInt(quantity) || 0;
     const priceNum = parseInt(pricePerHead) || 0;
     if (isCustom) {
-      dispatch({ type: 'ADD_CUSTOM_CATEGORY', payload: finalCategory });
+      await addCustomCategory(finalCategory);
     }
-    dispatch({
-      type: 'CREATE_LISTING',
-      payload: {
-        dealerId: currentUser.id,
-        title: title.trim(),
-        category: finalCategory,
-        pricePerHead: priceNum,
-        availableStock: qtyNum,
-        originalStock: qtyNum,
-        region,
-        province,
-        municipality: municipality.trim(),
-        description: description.trim(),
-      },
+    const { error } = await createListing({
+      title: title.trim(),
+      category: finalCategory,
+      pricePerHead: priceNum,
+      availableStock: qtyNum,
+      region,
+      province,
+      municipality: municipality.trim(),
+      description: description.trim(),
     });
+    setSubmitting(false);
+    if (error) {
+      setErrors({ submit: error });
+      return;
+    }
     setDone(true);
   };
 
@@ -235,7 +237,8 @@ export default function AddListingModal({ open, onClose }: AddListingModalProps)
                 {errors.description && <p className="text-xs mt-1 flex items-center gap-1" style={{ color: 'var(--error)' }}><AlertCircle size={12} />{errors.description}</p>}
               </div>
 
-              <button onClick={handleSubmit} className="btn-primary w-full py-3">
+              <button onClick={handleSubmit} disabled={submitting} className="btn-primary w-full py-3 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                {submitting && <Loader2 size={18} className="animate-spin" />}
                 Publish Listing
               </button>
             </div>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { AppProvider, useApp } from '@/context/AppContext';
 import Navbar from '@/components/Navbar';
 import AuthScreen from '@/views/AuthScreen';
@@ -12,8 +13,16 @@ import NotificationsView from '@/views/NotificationsView';
 type View = 'browse' | 'myOffers' | 'inventory' | 'incoming' | 'profile' | 'notifications';
 
 function AppContent() {
-  const { currentUser } = useApp();
+  const { currentUser, authLoading, loading } = useApp();
   const [view, setView] = useState<View>('browse');
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg)' }}>
+        <Loader2 size={32} className="animate-spin" style={{ color: 'var(--primary)' }} />
+      </div>
+    );
+  }
 
   if (!currentUser) {
     return <AuthScreen />;
@@ -28,6 +37,14 @@ function AppContent() {
   const homeLabel = role === 'customer' ? 'Back to Marketplace' : 'Back to Dashboard';
 
   const goBack = () => setView(homeView);
+
+  if (loading && !authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg)' }}>
+        <Loader2 size={32} className="animate-spin" style={{ color: 'var(--primary)' }} />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--bg)' }}>

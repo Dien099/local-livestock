@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ShoppingBag, MapPin, Calendar, Truck, Package, Star, CheckCircle2, XCircle, Clock } from 'lucide-react';
-import type { Offer, Listing, User } from '@/types';
+import type { Offer, Listing, Profile } from '@/types';
 import { useApp } from '@/context/AppContext';
 import RatingModal from '@/components/RatingModal';
 import BackButton from '@/components/BackButton';
@@ -10,13 +10,15 @@ interface CustomerOffersProps {
 }
 
 export default function CustomerOffers({ onBack }: CustomerOffersProps) {
-  const { state, currentUser } = useApp();
+  const { listings, myOffers, currentUser } = useApp();
   const [ratingOffer, setRatingOffer] = useState<Offer | null>(null);
 
-  const myOffers = state.offers.filter((o) => o.buyerId === currentUser?.id);
-
-  const getListing = (id: string): Listing | undefined => state.listings.find((l) => l.id === id);
-  const getDealer = (id: string): User | undefined => state.users.find((u) => u.id === id && u.accountType === 'dealer');
+  const getListing = (id: string): Listing | undefined => listings.find((l) => l.id === id);
+  const getDealer = (id: string): Profile | undefined => {
+    const listing = listings.find((l) => l.dealerId === id);
+    if (!listing) return undefined;
+    return { id, accountType: 'dealer', name: listing.dealerName, email: '', farmName: listing.farmName, region: '', province: '', municipality: '', qualityRating: 0, serviceRating: 0, reviewCount: 0, createdAt: '' };
+  };
 
   const statusBadge = (status: Offer['status']) => {
     const config = {
@@ -100,13 +102,13 @@ export default function CustomerOffers({ onBack }: CustomerOffersProps) {
                       </div>
                     </div>
 
-                    {offer.status === 'APPROVED' && offer.scheduledPickupWindow && (
+                    {offer.status === 'COMPLETED' && offer.scheduledPickupWindow && (
                       <div className="mt-3 p-2 rounded-lg text-xs" style={{ backgroundColor: 'color-mix(in srgb, var(--success) 10%, transparent)', color: 'var(--text)' }}>
                         <strong>Pickup scheduled:</strong> {offer.scheduledPickupWindow}
                         {offer.dealerNotes && <div className="mt-1" style={{ color: 'var(--text-muted)' }}>Note: {offer.dealerNotes}</div>}
                       </div>
                     )}
-                    {offer.status === 'APPROVED' && offer.deliveryFee !== undefined && (
+                    {offer.status === 'COMPLETED' && offer.deliveryFee !== undefined && offer.deliveryFee !== null && (
                       <div className="mt-3 p-2 rounded-lg text-xs" style={{ backgroundColor: 'color-mix(in srgb, var(--success) 10%, transparent)', color: 'var(--text)' }}>
                         <strong>Delivery approved:</strong> Fee ₱{offer.deliveryFee.toLocaleString()}
                         {offer.dealerNotes && <div className="mt-1" style={{ color: 'var(--text-muted)' }}>Note: {offer.dealerNotes}</div>}
@@ -125,7 +127,7 @@ export default function CustomerOffers({ onBack }: CustomerOffersProps) {
                             <Star size={14} className="fill-current" style={{ color: 'var(--accent)' }} /> Reviewed
                           </span>
                         ) : (
-                          <button onClick={() => setRatingOffer(offer)} className="btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5">
+                          <button onClick={() => setRatingOffer(offer)} className="btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5 min-h-[36px]">
                             <Star size={14} style={{ color: 'var(--accent)' }} /> Rate this dealer
                           </button>
                         )}

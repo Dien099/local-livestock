@@ -1,22 +1,23 @@
 import { useState, useEffect } from 'react';
-import { X, Check, Truck, Calendar, AlertCircle } from 'lucide-react';
-import type { Offer, Listing, User } from '@/types';
+import { X, Check, Truck, Calendar, AlertCircle, Loader2 } from 'lucide-react';
+import type { Offer, Listing } from '@/types';
 import { useApp } from '@/context/AppContext';
 
 interface ApprovalModalProps {
   offer: Offer | null;
   listing: Listing | null;
-  dealer: User | null;
+  dealer: { id: string; farmName?: string | null } | null;
   onClose: () => void;
 }
 
 export default function ApprovalModal({ offer, listing, dealer, onClose }: ApprovalModalProps) {
-  const { dispatch } = useApp();
+  const { approveOffer, rejectOffer } = useApp();
   const [action, setAction] = useState<'approve' | 'reject' | null>(null);
   const [dealerNotes, setDealerNotes] = useState('');
   const [pickupWindow, setPickupWindow] = useState('');
   const [deliveryFee, setDeliveryFee] = useState('0');
   const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (offer) {
@@ -30,22 +31,24 @@ export default function ApprovalModal({ offer, listing, dealer, onClose }: Appro
 
   if (!offer || !listing || !dealer) return null;
 
-  const handleApprove = () => {
-    dispatch({
-      type: 'APPROVE_OFFER',
-      payload: {
-        offerId: offer.id,
-        dealerNotes,
-        scheduledPickupWindow: offer.fulfillmentMethod === 'pickup' ? pickupWindow : undefined,
-        deliveryFee: offer.fulfillmentMethod === 'delivery' ? (parseInt(deliveryFee) || 0) : undefined,
-      },
+  const handleApprove = async () => {
+    setBusy(true);
+    const { error } = await approveOffer({
+      offerId: offer.id,
+      dealerNotes,
+      scheduledPickupWindow: offer.fulfillmentMethod === 'pickup' ? pickupWindow : undefined,
+      deliveryFee: offer.fulfillmentMethod === 'delivery' ? (parseInt(deliveryFee) || 0) : undefined,
     });
-    dispatch({ type: 'COMPLETE_OFFER', payload: offer.id });
+    setBusy(false);
+    if (error) { setAction(null); return; }
     setDone(true);
   };
 
-  const handleReject = () => {
-    dispatch({ type: 'REJECT_OFFER', payload: offer.id });
+  const handleReject = async () => {
+    setBusy(true);
+    const { error } = await rejectOffer(offer.id);
+    setBusy(false);
+    if (error) { setAction(null); return; }
     setDone(true);
   };
 
@@ -217,12 +220,12 @@ export default function ApprovalModal({ offer, listing, dealer, onClose }: Appro
                       Back
                     </button>
                     {action === 'approve' ? (
-                      <button onClick={handleApprove} className="py-3 rounded-lg font-semibold text-sm text-white transition-all active:scale-95" style={{ backgroundColor: 'var(--success)' }}>
-                        Confirm Approve
+                      <button onClick={handleApprove} disabled={busy} className="py-3 rounded-lg font-semibold text-sm text-white transition-all active:scale-95 disabled:opacity-60" style={{ backgroundColor: 'var(--success)' }}>
+                        {busy ? 'Processing...' : 'Confirm Approve'}
                       </button>
                     ) : (
-                      <button onClick={handleReject} className="py-3 rounded-lg font-semibold text-sm text-white transition-all active:scale-95" style={{ backgroundColor: 'var(--error)' }}>
-                        Confirm Reject
+                      <button onClick={handleReject} disabled={busy} className="py-3 rounded-lg font-semibold text-sm text-white transition-all active:scale-95 disabled:opacity-60" style={{ backgroundColor: 'var(--error)' }}>
+                        {busy ? 'Processing...' : 'Confirm Reject'}
                       </button>
                     )}
                   </div>

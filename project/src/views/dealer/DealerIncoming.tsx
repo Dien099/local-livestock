@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { ShoppingBag, User as UserIcon, Phone, Package, Calendar, Truck, CheckCircle2, XCircle, Clock, Star } from 'lucide-react';
 import type { Offer, Listing } from '@/types';
-import type { User as UserType } from '@/types';
 import { useApp } from '@/context/AppContext';
 import ApprovalModal from '@/components/ApprovalModal';
 import BackButton from '@/components/BackButton';
@@ -13,21 +12,19 @@ interface DealerIncomingProps {
 }
 
 export default function DealerIncoming({ onBack }: DealerIncomingProps) {
-  const { state, currentUser } = useApp();
+  const { incomingOffers, listings } = useApp();
   const [filter, setFilter] = useState<FilterTab>('pending');
   const [selectedOffer, setSelectedOffer] = useState<Offer | null>(null);
 
-  const myOffers = state.offers.filter((o) => o.dealerId === currentUser?.id);
-  const filtered = myOffers.filter((o) => o.status.toLowerCase() === filter);
+  const filtered = incomingOffers.filter((o) => o.status.toLowerCase() === filter);
 
-  const getListing = (id: string): Listing | undefined => state.listings.find((l) => l.id === id);
-  const getDealer = (id: string): UserType | undefined => state.users.find((u) => u.id === id);
+  const getListing = (id: string): Listing | undefined => listings.find((l) => l.id === id);
 
   const counts = {
-    pending: myOffers.filter((o) => o.status === 'PENDING').length,
-    approved: myOffers.filter((o) => o.status === 'APPROVED').length,
-    completed: myOffers.filter((o) => o.status === 'COMPLETED').length,
-    rejected: myOffers.filter((o) => o.status === 'REJECTED').length,
+    pending: incomingOffers.filter((o) => o.status === 'PENDING').length,
+    approved: incomingOffers.filter((o) => o.status === 'APPROVED').length,
+    completed: incomingOffers.filter((o) => o.status === 'COMPLETED').length,
+    rejected: incomingOffers.filter((o) => o.status === 'REJECTED').length,
   };
 
   const statusBadge = (status: Offer['status']) => {
@@ -52,6 +49,8 @@ export default function DealerIncoming({ onBack }: DealerIncomingProps) {
     { id: 'completed', label: 'Completed', count: counts.completed },
     { id: 'rejected', label: 'Rejected', count: counts.rejected },
   ];
+
+  const dealerProfile = selectedOffer ? { id: selectedOffer.dealerId, accountType: 'dealer' as const, name: '', email: '', region: '', province: '', municipality: '', qualityRating: 0, serviceRating: 0, reviewCount: 0, createdAt: '', farmName: getListing(selectedOffer.listingId)?.farmName } : null;
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
@@ -136,15 +135,9 @@ export default function DealerIncoming({ onBack }: DealerIncomingProps) {
                         </div>
                       </div>
                       {offer.status === 'PENDING' && (
-                        <button onClick={() => setSelectedOffer(offer)} className="btn-primary text-sm">
+                        <button onClick={() => setSelectedOffer(offer)} className="btn-primary text-sm min-h-[44px]">
                           Review Offer
                         </button>
-                      )}
-                      {offer.status === 'APPROVED' && (
-                        <div className="text-right text-xs" style={{ color: 'var(--text-muted)' }}>
-                          {offer.scheduledPickupWindow && <div>Pickup: {offer.scheduledPickupWindow}</div>}
-                          {offer.deliveryFee !== undefined && <div>Delivery fee: ₱{offer.deliveryFee.toLocaleString()}</div>}
-                        </div>
                       )}
                       {offer.status === 'COMPLETED' && offer.rated && (
                         <span className="text-xs flex items-center gap-1" style={{ color: 'var(--success)' }}>
@@ -163,7 +156,7 @@ export default function DealerIncoming({ onBack }: DealerIncomingProps) {
       <ApprovalModal
         offer={selectedOffer}
         listing={selectedOffer ? getListing(selectedOffer.listingId) ?? null : null}
-        dealer={selectedOffer ? getDealer(selectedOffer.dealerId) ?? null : null}
+        dealer={dealerProfile}
         onClose={() => setSelectedOffer(null)}
       />
     </div>

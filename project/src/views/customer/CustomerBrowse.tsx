@@ -7,13 +7,13 @@ import ProvinceFilter from '@/components/ProvinceFilter';
 import OfferModal from '@/components/OfferModal';
 
 export default function CustomerBrowse() {
-  const { state } = useApp();
+  const { listings } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRegion, setSelectedRegion] = useState('');
   const [selectedProvince, setSelectedProvince] = useState('');
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
 
-  const filtered = state.listings.filter((l) => {
+  const filtered = listings.filter((l) => {
     const regionMatch = !selectedRegion || l.region === selectedRegion;
     const provinceMatch = !selectedProvince || l.province === selectedProvince;
     const searchMatch =

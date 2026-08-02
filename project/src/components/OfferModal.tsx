@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Calendar, Truck, Package, User, Phone, AlertCircle } from 'lucide-react';
+import { X, Calendar, Truck, Package, User, Phone, AlertCircle, Loader2 } from 'lucide-react';
 import type { Listing, FulfillmentMethod } from '@/types';
 import { useApp } from '@/context/AppContext';
 import StarRating from '@/components/StarRating';
@@ -10,7 +10,7 @@ interface OfferModalProps {
 }
 
 export default function OfferModal({ listing, onClose }: OfferModalProps) {
-  const { state, dispatch, currentUser } = useApp();
+  const { listings, submitOffer, currentUser } = useApp();
   const [quantity, setQuantity] = useState('1');
   const [fulfillment, setFulfillment] = useState<FulfillmentMethod>('pickup');
   const [preferredDate, setPreferredDate] = useState('');
@@ -19,6 +19,7 @@ export default function OfferModal({ listing, onClose }: OfferModalProps) {
   const [deliveryFee, setDeliveryFee] = useState('0');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   useEffect(() => {
     if (listing && currentUser) {
@@ -30,12 +31,14 @@ export default function OfferModal({ listing, onClose }: OfferModalProps) {
       setDeliveryFee('0');
       setErrors({});
       setSubmitted(false);
+      setSubmitError('');
     }
   }, [listing, currentUser]);
 
   if (!listing) return null;
 
-  const dealer = state.users.find((u) => u.id === listing.dealerId && u.accountType === 'dealer');
+  const dealer = currentUser && listing.dealerId === currentUser.id ? currentUser : null;
+  // For dealer rating display, fetch from reviews if needed — skip for now
   const qtyNum = parseInt(quantity) || 0;
   const feeNum = parseInt(deliveryFee) || 0;
   const totalPrice = listing.pricePerHead * qtyNum;
@@ -52,22 +55,26 @@ export default function OfferModal({ listing, onClose }: OfferModalProps) {
     return Object.keys(e).length === 0;
   };
 
-  const handleSubmit = () => {
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
     if (!validate() || !currentUser) return;
-    dispatch({
-      type: 'SUBMIT_OFFER',
-      payload: {
-        listingId: listing.id,
-        dealerId: listing.dealerId,
-        buyerId: currentUser.id,
-        buyerName,
-        buyerContact,
-        quantity: qtyNum,
-        fulfillmentMethod: fulfillment,
-        preferredDate,
-        deliveryFee: fulfillment === 'delivery' ? feeNum : undefined,
-      },
+    setSubmitting(true);
+    const { error } = await submitOffer({
+      listingId: listing.id,
+      dealerId: listing.dealerId,
+      buyerName,
+      buyerContact,
+      quantity: qtyNum,
+      fulfillmentMethod: fulfillment,
+      preferredDate,
+      deliveryFee: fulfillment === 'delivery' ? feeNum : undefined,
     });
+    setSubmitting(false);
+    if (error) {
+      setErrors({ submit: error });
+      return;
+    }
     setSubmitted(true);
   };
 
@@ -267,7 +274,8 @@ export default function OfferModal({ listing, onClose }: OfferModalProps) {
                 </div>
               )}
 
-              <button onClick={handleSubmit} className="btn-primary w-full py-3">
+              <button onClick={handleSubmit} disabled={submitting} className="btn-primary w-full py-3 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                {submitting ? <Loader2 size={18} className="animate-spin" /> : null}
                 Submit Offer
               </button>
             </div>

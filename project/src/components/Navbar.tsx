@@ -14,7 +14,7 @@ interface NavbarProps {
 }
 
 export default function Navbar({ onNavigate, activeView }: NavbarProps) {
-  const { dispatch, currentUser } = useApp();
+  const { signOut, currentUser } = useApp();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -34,8 +34,8 @@ export default function Navbar({ onNavigate, activeView }: NavbarProps) {
 
   const tabs = role === 'customer' ? customerTabs : dealerTabs;
 
-  const handleSignOut = () => {
-    dispatch({ type: 'LOGOUT' });
+  const handleSignOut = async () => {
+    await signOut();
     setUserMenuOpen(false);
     setMobileOpen(false);
   };

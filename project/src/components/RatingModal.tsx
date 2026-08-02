@@ -1,22 +1,23 @@
 import { useState, useEffect } from 'react';
 import { X, Star } from 'lucide-react';
-import type { Offer, Listing, User } from '@/types';
+import type { Offer, Listing } from '@/types';
 import { useApp } from '@/context/AppContext';
 import StarRating from '@/components/StarRating';
 
 interface RatingModalProps {
   offer: Offer | null;
   listing: Listing | null;
-  dealer: User | null;
+  dealer: { id: string; name: string; farmName?: string | null } | null;
   onClose: () => void;
 }
 
 export default function RatingModal({ offer, listing, dealer, onClose }: RatingModalProps) {
-  const { dispatch } = useApp();
+  const { submitReview } = useApp();
   const [qualityRating, setQualityRating] = useState(0);
   const [serviceRating, setServiceRating] = useState(0);
   const [comment, setComment] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (offer) {
@@ -29,19 +30,19 @@ export default function RatingModal({ offer, listing, dealer, onClose }: RatingM
 
   if (!offer || !listing || !dealer) return null;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (qualityRating === 0 || serviceRating === 0) return;
-    dispatch({
-      type: 'SUBMIT_REVIEW',
-      payload: {
-        offerId: offer.id,
-        dealerId: dealer.id,
-        qualityRating,
-        serviceRating,
-        comment,
-        buyerName: offer.buyerName,
-      },
+    setBusy(true);
+    const { error } = await submitReview({
+      offerId: offer.id,
+      dealerId: dealer.id,
+      qualityRating,
+      serviceRating,
+      comment,
+      buyerName: offer.buyerName,
     });
+    setBusy(false);
+    if (error) return;
     setSubmitted(true);
   };
 
@@ -120,10 +121,10 @@ export default function RatingModal({ offer, listing, dealer, onClose }: RatingM
 
               <button
                 onClick={handleSubmit}
-                disabled={qualityRating === 0 || serviceRating === 0}
+                disabled={qualityRating === 0 || serviceRating === 0 || busy}
                 className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Submit Review
+                {busy ? 'Submitting...' : 'Submit Review'}
               </button>
             </div>
           </>

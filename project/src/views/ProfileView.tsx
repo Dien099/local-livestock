@@ -11,7 +11,7 @@ interface ProfileViewProps {
 }
 
 export default function ProfileView({ onBack, homeLabel }: ProfileViewProps) {
-  const { state, dispatch, currentUser } = useApp();
+  const { currentUser, updateProfile, reviews, myOffers, listings } = useApp();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(currentUser?.name ?? '');
   const [farmName, setFarmName] = useState(currentUser?.farmName ?? '');
@@ -19,16 +19,16 @@ export default function ProfileView({ onBack, homeLabel }: ProfileViewProps) {
   const [region, setRegion] = useState(currentUser?.region ?? '');
   const [province, setProvince] = useState(currentUser?.province ?? '');
   const [municipality, setMunicipality] = useState(currentUser?.municipality ?? '');
+  const [saving, setSaving] = useState(false);
 
   if (!currentUser) return null;
 
   const isDealer = currentUser.accountType === 'dealer';
 
-  const handleSave = () => {
-    dispatch({
-      type: 'UPDATE_PROFILE',
-      payload: { name: name.trim(), farmName: farmName.trim() || undefined, phone: phone.trim() || undefined, region, province, municipality: municipality.trim() },
-    });
+  const handleSave = async () => {
+    setSaving(true);
+    await updateProfile({ name: name.trim(), farmName: farmName.trim() || undefined, phone: phone.trim() || undefined, region, province, municipality: municipality.trim() });
+    setSaving(false);
     setEditing(false);
   };
 
@@ -42,14 +42,13 @@ export default function ProfileView({ onBack, homeLabel }: ProfileViewProps) {
     setEditing(false);
   };
 
-  const dealerReviews = state.reviews.filter((r) => r.dealerId === currentUser.id);
-  const myOffers = state.offers.filter((o) => o.buyerId === currentUser.id);
+  const dealerReviews = reviews.filter((r) => r.dealerId === currentUser.id);
   const completedOffers = myOffers.filter((o) => o.status === 'COMPLETED' || o.status === 'APPROVED');
-  const myListings = state.listings.filter((l) => l.dealerId === currentUser.id);
+  const myListings = listings.filter((l) => l.dealerId === currentUser.id);
   const totalStock = myListings.reduce((s, l) => s + l.availableStock, 0);
   const totalSold = myListings.reduce((s, l) => s + (l.originalStock - l.availableStock), 0);
 
-  const getListing = (id: string) => state.listings.find((l) => l.id === id);
+  const getListing = (id: string) => listings.find((l) => l.id === id);
 
   const avgRating = currentUser.reviewCount > 0 ? (currentUser.qualityRating + currentUser.serviceRating) / 2 : 0;
 
@@ -69,11 +68,11 @@ export default function ProfileView({ onBack, homeLabel }: ProfileViewProps) {
           </button>
         ) : (
           <div className="flex gap-2">
-            <button onClick={handleCancel} className="btn-ghost flex items-center gap-2 min-h-[44px]">
+            <button onClick={handleCancel} className="btn-ghost flex items-center gap-2 min-h-[44px]" disabled={saving}>
               <X size={16} /> <span className="hidden sm:inline">Cancel</span>
             </button>
-            <button onClick={handleSave} className="btn-primary flex items-center gap-2 min-h-[44px]">
-              <Check size={16} /> <span className="hidden sm:inline">Save</span>
+            <button onClick={handleSave} className="btn-primary flex items-center gap-2 min-h-[44px]" disabled={saving}>
+              <Check size={16} /> <span className="hidden sm:inline">{saving ? 'Saving...' : 'Save'}</span>
             </button>
           </div>
         )}

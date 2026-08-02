@@ -6,9 +6,9 @@ interface NotificationBellProps {
 }
 
 export default function NotificationBell({ onClick }: NotificationBellProps) {
-  const { state, currentUser } = useApp();
+  const { notifications, currentUser } = useApp();
 
-  const myNotifications = state.notifications.filter((n) => n.userId === currentUser?.id);
+  const myNotifications = notifications.filter((n) => n.userId === currentUser?.id);
   const unread = myNotifications.filter((n) => !n.read);
 
   return (

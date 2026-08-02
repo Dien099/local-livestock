@@ -9,10 +9,10 @@ interface DealerInventoryProps {
 }
 
 export default function DealerInventory({ onIncoming }: DealerInventoryProps) {
-  const { state, currentUser } = useApp();
+  const { listings, currentUser } = useApp();
   const [showAdd, setShowAdd] = useState(false);
 
-  const myListings = state.listings.filter((l) => l.dealerId === currentUser?.id);
+  const myListings = listings.filter((l) => l.dealerId === currentUser?.id);
 
   const totalStock = myListings.reduce((sum, l) => sum + l.availableStock, 0);
   const totalSold = myListings.reduce((sum, l) => sum + (l.originalStock - l.availableStock), 0);
@@ -34,7 +34,6 @@ export default function DealerInventory({ onIncoming }: DealerInventoryProps) {
         </button>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="card p-4">
           <div className="flex items-center gap-2 mb-1">

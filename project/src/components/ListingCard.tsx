@@ -1,6 +1,5 @@
 import type { Listing } from '@/types';
 import { MapPin, TrendingDown, Package } from 'lucide-react';
-import { useApp } from '@/context/AppContext';
 
 interface ListingCardProps {
   listing: Listing;
@@ -8,11 +7,8 @@ interface ListingCardProps {
 }
 
 export default function ListingCard({ listing, onClick }: ListingCardProps) {
-  const { state } = useApp();
-  const dealer = state.users.find((d) => d.id === listing.dealerId);
   const stockPercent = listing.originalStock > 0 ? (listing.availableStock / listing.originalStock) * 100 : 0;
   const isLowStock = listing.availableStock <= 50;
-  const avgRating = dealer && dealer.reviewCount > 0 ? (dealer.qualityRating + dealer.serviceRating) / 2 : null;
 
   return (
     <button
@@ -97,14 +93,9 @@ export default function ListingCard({ listing, onClick }: ListingCardProps) {
               ₱{listing.pricePerHead.toLocaleString()}
             </div>
           </div>
-          {dealer && (
+          {listing.farmName && (
             <div className="text-right">
               <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{listing.farmName}</span>
-              {avgRating !== null && (
-                <div className="text-xs font-medium" style={{ color: 'var(--text)' }}>
-                  ⭐ {avgRating.toFixed(1)}
-                </div>
-              )}
             </div>
           )}
         </div>

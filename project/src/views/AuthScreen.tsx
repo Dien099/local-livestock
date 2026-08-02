@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
-import { User, Store, Mail, Lock, MapPin, AlertCircle, Sprout, Eye, EyeOff, CheckCircle2, TrendingUp, ShieldCheck } from 'lucide-react';
+import { User, Store, Mail, Lock, MapPin, AlertCircle, Sprout, Eye, EyeOff, CheckCircle2, TrendingUp, ShieldCheck, Loader2 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import RegionProvinceSelector from '@/components/RegionProvinceSelector';
 import ThemeToggle from '@/components/ThemeToggle';
 import type { AccountType } from '@/types';
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
 const HERO_IMAGE = 'https://images.pexels.com/photos/29682473/pexels-photo-29682473.jpeg?auto=compress&cs=tinysrgb&h=1200&w=800';
 
 export default function AuthScreen() {
-  const { state, dispatch } = useApp();
+  const { signIn, signUp } = useApp();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [accountType, setAccountType] = useState<AccountType>('customer');
   const [name, setName] = useState('');
@@ -21,9 +23,12 @@ export default function AuthScreen() {
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setError('');
+    setSuccess('');
   }, [mode, accountType]);
 
   const resetForm = () => {
@@ -35,49 +40,63 @@ export default function AuthScreen() {
     setProvince('');
     setMunicipality('');
     setError('');
+    setSuccess('');
   };
 
-  const handleSignIn = () => {
+  const handleSignIn = async () => {
+    setError('');
     if (!email.trim() || !password.trim()) {
       setError('Please enter your email and password.');
       return;
     }
-    const user = state.users.find(
-      (u) => u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password
-    );
-    if (!user) {
-      setError('No account found with those credentials.');
+    if (!EMAIL_REGEX.test(email.trim())) {
+      setError('Please enter a valid email address.');
       return;
     }
-    dispatch({ type: 'LOGIN', payload: { email: email.trim(), password, rememberMe } });
+    setBusy(true);
+    const { error: signInError } = await signIn(email.trim(), password, rememberMe);
+    setBusy(false);
+    if (signInError) {
+      setError(signInError.includes('Invalid login') ? 'Incorrect email or password.' : signInError);
+    }
   };
 
-  const handleSignUp = () => {
+  const handleSignUp = async () => {
+    setError('');
+    setSuccess('');
     if (!name.trim() || !email.trim() || !password.trim() || !region || !province) {
       setError('Please fill in all required fields.');
+      return;
+    }
+    if (!EMAIL_REGEX.test(email.trim())) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.');
       return;
     }
     if (accountType === 'dealer' && !farmName.trim()) {
       setError('Farm/Store name is required for dealers.');
       return;
     }
-    if (state.users.some((u) => u.email.toLowerCase() === email.trim().toLowerCase())) {
-      setError('An account with this email already exists.');
+    setBusy(true);
+    const { error: signUpError } = await signUp({
+      accountType,
+      name: name.trim(),
+      email: email.trim(),
+      password,
+      region,
+      province,
+      municipality: municipality.trim(),
+      farmName: accountType === 'dealer' ? farmName.trim() : undefined,
+    });
+    setBusy(false);
+    if (signUpError) {
+      setError(signUpError.includes('already') ? 'An account with this email already exists.' : signUpError);
       return;
     }
-    dispatch({
-      type: 'REGISTER',
-      payload: {
-        accountType,
-        name: name.trim(),
-        email: email.trim(),
-        password,
-        region,
-        province,
-        municipality: municipality.trim(),
-        farmName: accountType === 'dealer' ? farmName.trim() : undefined,
-      },
-    });
+    setSuccess('Account created! You are now signed in.');
     resetForm();
   };
 
@@ -337,10 +356,19 @@ export default function AuthScreen() {
                   </div>
                 )}
 
+                {success && (
+                  <div className="p-3 rounded-lg flex items-center gap-2 text-sm" style={{ backgroundColor: 'color-mix(in srgb, var(--success) 10%, transparent)', color: 'var(--success)' }}>
+                    <CheckCircle2 size={16} />
+                    {success}
+                  </div>
+                )}
+
                 <button
                   onClick={mode === 'signin' ? handleSignIn : handleSignUp}
-                  className="btn-primary w-full py-3 min-h-[48px]"
+                  disabled={busy}
+                  className="btn-primary w-full py-3 min-h-[48px] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
+                  {busy && <Loader2 size={18} className="animate-spin" />}
                   {mode === 'signin' ? 'Sign In' : 'Create Account'}
                 </button>
               </div>

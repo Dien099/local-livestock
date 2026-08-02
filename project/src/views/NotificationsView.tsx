@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Bell, Check, CheckCircle2, XCircle, Package, Clock, Trash2, Inbox } from 'lucide-react';
+import { Bell, Check, CheckCircle2, XCircle, Package, Clock, Inbox } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import BackButton from '@/components/BackButton';
 import type { AppNotification } from '@/types';
@@ -24,19 +24,19 @@ interface NotificationsViewProps {
 }
 
 export default function NotificationsView({ onBack, homeLabel }: NotificationsViewProps) {
-  const { state, dispatch, currentUser } = useApp();
+  const { notifications, markNotificationsRead, currentUser } = useApp();
 
-  const myNotifications = state.notifications.filter((n) => n.userId === currentUser?.id);
+  const myNotifications = notifications.filter((n) => n.userId === currentUser?.id);
   const unread = myNotifications.filter((n) => !n.read);
 
   useEffect(() => {
     if (unread.length > 0) {
       const timer = setTimeout(() => {
-        dispatch({ type: 'MARK_NOTIFICATIONS_READ', payload: unread.map((n) => n.id) });
+        markNotificationsRead(unread.map((n) => n.id));
       }, 1200);
       return () => clearTimeout(timer);
     }
-  }, [unread.length, dispatch, unread]);
+  }, [unread.length, markNotificationsRead, unread]);
 
   const timeAgo = (iso: string): string => {
     const diff = Date.now() - new Date(iso).getTime();

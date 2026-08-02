@@ -1,284 +1,430 @@
-import { createContext, useContext, useReducer, useEffect, type ReactNode, type Dispatch } from 'react';
-import type { PersistedState, AppAction, User, Listing, Offer, Review, AppNotification } from '@/types';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import type { Session } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
+import {
+  type Profile, type Listing, type Offer, type Review, type AppNotification,
+  type AccountType, type FulfillmentMethod,
+  type ProfileRow, type ListingRow, type OfferRow, type ReviewRow, type NotificationRow,
+  mapProfile, mapListing, mapOffer, mapReview, mapNotification,
+} from '@/types';
 import { getCategoryImage } from '@/data/mockData';
 import { DEFAULT_CATEGORIES } from '@/data/regions';
 
-const STORAGE_KEY = 'local-livestock-state-v2';
-
-const emptyState: PersistedState = {
-  users: [],
-  listings: [],
-  offers: [],
-  reviews: [],
-  notifications: [],
-  customCategories: [],
-  isDark: false,
-  currentUserId: null,
-  rememberMe: false,
-};
-
-function loadState(): PersistedState {
-  if (typeof window === 'undefined') return emptyState;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return emptyState;
-    const parsed = JSON.parse(raw) as Partial<PersistedState>;
-    return {
-      users: parsed.users ?? [],
-      listings: parsed.listings ?? [],
-      offers: parsed.offers ?? [],
-      reviews: parsed.reviews ?? [],
-      notifications: parsed.notifications ?? [],
-      customCategories: parsed.customCategories ?? [],
-      isDark: parsed.isDark ?? false,
-      currentUserId: parsed.currentUserId ?? null,
-      rememberMe: parsed.rememberMe ?? false,
-    };
-  } catch {
-    return emptyState;
-  }
+interface RegisterParams {
+  accountType: AccountType;
+  name: string;
+  email: string;
+  password: string;
+  region: string;
+  province: string;
+  municipality: string;
+  farmName?: string;
 }
 
-function genId(prefix: string): string {
-  return `${prefix}${Date.now()}${Math.floor(Math.random() * 1000)}`;
+interface OfferParams {
+  listingId: string;
+  dealerId: string;
+  buyerName: string;
+  buyerContact: string;
+  quantity: number;
+  fulfillmentMethod: FulfillmentMethod;
+  preferredDate: string;
+  deliveryFee?: number;
 }
 
-function pushNotification(
-  notifications: AppNotification[],
-  userId: string,
-  type: AppNotification['type'],
-  title: string,
-  message: string,
-  offerId?: string
-): AppNotification[] {
-  const n: AppNotification = {
-    id: genId('n'),
-    userId,
-    type,
-    title,
-    message,
-    offerId,
-    read: false,
-    createdAt: new Date().toISOString(),
-  };
-  return [n, ...notifications];
+interface ListingParams {
+  title: string;
+  category: string;
+  pricePerHead: number;
+  availableStock: number;
+  region: string;
+  province: string;
+  municipality: string;
+  description: string;
 }
 
-function reducer(state: PersistedState, action: AppAction): PersistedState {
-  switch (action.type) {
-    case 'HYDRATE':
-      return action.payload;
+interface ReviewParams {
+  offerId: string;
+  dealerId: string;
+  qualityRating: number;
+  serviceRating: number;
+  comment: string;
+  buyerName: string;
+}
 
-    case 'TOGGLE_THEME':
-      return { ...state, isDark: !state.isDark };
-
-    case 'SET_DARK':
-      return { ...state, isDark: action.payload };
-
-    case 'REGISTER': {
-      const newUser: User = {
-        ...action.payload,
-        id: genId('u'),
-        qualityRating: 0,
-        serviceRating: 0,
-        reviewCount: 0,
-        createdAt: new Date().toISOString(),
-      };
-      return { ...state, users: [...state.users, newUser], currentUserId: newUser.id, rememberMe: true };
-    }
-
-    case 'LOGIN': {
-      const user = state.users.find(
-        (u) => u.email.toLowerCase() === action.payload.email.toLowerCase() && u.password === action.payload.password
-      );
-      if (!user) return state;
-      return { ...state, currentUserId: user.id, rememberMe: action.payload.rememberMe };
-    }
-
-    case 'LOGOUT':
-      return { ...state, currentUserId: null, rememberMe: false };
-
-    case 'UPDATE_PROFILE': {
-      const users = state.users.map((u) =>
-        u.id === state.currentUserId ? { ...u, ...action.payload } : u
-      );
-      return { ...state, users };
-    }
-
-    case 'CREATE_LISTING': {
-      const dealer = state.users.find((u) => u.id === action.payload.dealerId);
-      if (!dealer) return state;
-      const batchNumber = `${action.payload.category.slice(0, 2).toUpperCase()}-${new Date().getFullYear()}-${String(state.listings.length + 1).padStart(4, '0')}`;
-      const newListing: Listing = {
-        ...action.payload,
-        id: genId('l'),
-        batchNumber,
-        dealerName: dealer.name,
-        farmName: dealer.farmName || dealer.name,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        imageUrl: getCategoryImage(action.payload.category),
-      };
-      return { ...state, listings: [newListing, ...state.listings] };
-    }
-
-    case 'ADD_CUSTOM_CATEGORY': {
-      if (state.customCategories.includes(action.payload) || DEFAULT_CATEGORIES.includes(action.payload)) {
-        return state;
-      }
-      return { ...state, customCategories: [...state.customCategories, action.payload] };
-    }
-
-    case 'SUBMIT_OFFER': {
-      const newOffer: Offer = {
-        ...action.payload,
-        id: genId('o'),
-        status: 'PENDING',
-        createdAt: new Date().toISOString(),
-        rated: false,
-      };
-      const notifications = pushNotification(
-        state.notifications,
-        action.payload.dealerId,
-        'offer_received',
-        'New Offer Received',
-        `${action.payload.buyerName} requested ${action.payload.quantity} head`,
-        newOffer.id
-      );
-      return { ...state, offers: [newOffer, ...state.offers], notifications };
-    }
-
-    case 'APPROVE_OFFER': {
-      const { offerId, dealerNotes, scheduledPickupWindow, deliveryFee } = action.payload;
-      const offer = state.offers.find((o) => o.id === offerId);
-      if (!offer) return state;
-
-      const listings = state.listings.map((l) =>
-        l.id === offer.listingId
-          ? { ...l, availableStock: Math.max(0, l.availableStock - offer.quantity) }
-          : l
-      );
-
-      const offers = state.offers.map((o) =>
-        o.id === offerId
-          ? { ...o, status: 'APPROVED' as const, dealerNotes, scheduledPickupWindow, deliveryFee, completedAt: new Date().toISOString() }
-          : o
-      );
-
-      const notifications = pushNotification(
-        state.notifications,
-        offer.buyerId,
-        'offer_approved',
-        'Offer Approved',
-        `Your offer has been approved by the dealer`,
-        offerId
-      );
-
-      return { ...state, listings, offers, notifications };
-    }
-
-    case 'REJECT_OFFER': {
-      const offer = state.offers.find((o) => o.id === action.payload);
-      const offers = state.offers.map((o) =>
-        o.id === action.payload ? { ...o, status: 'REJECTED' as const } : o
-      );
-      const notifications = offer
-        ? pushNotification(state.notifications, offer.buyerId, 'offer_rejected', 'Offer Rejected', 'Your offer was declined by the dealer', offer.id)
-        : state.notifications;
-      return { ...state, offers, notifications };
-    }
-
-    case 'COMPLETE_OFFER': {
-      const offer = state.offers.find((o) => o.id === action.payload);
-      const offers = state.offers.map((o) =>
-        o.id === action.payload
-          ? { ...o, status: 'COMPLETED' as const, completedAt: new Date().toISOString() }
-          : o
-      );
-      const notifications = offer
-        ? pushNotification(state.notifications, offer.buyerId, 'offer_completed', 'Transaction Completed', 'Your transaction is complete. You can now rate the dealer.', offer.id)
-        : state.notifications;
-      return { ...state, offers, notifications };
-    }
-
-    case 'SUBMIT_REVIEW': {
-      const newReview: Review = {
-        ...action.payload,
-        id: genId('r'),
-        createdAt: new Date().toISOString(),
-      };
-
-      const offers = state.offers.map((o) =>
-        o.id === action.payload.offerId ? { ...o, rated: true } : o
-      );
-
-      const users = state.users.map((u) => {
-        if (u.id !== action.payload.dealerId) return u;
-        const dealerReviews = [...state.reviews.filter((r) => r.dealerId === u.id), newReview];
-        const totalQuality = dealerReviews.reduce((sum, r) => sum + r.qualityRating, 0);
-        const totalService = dealerReviews.reduce((sum, r) => sum + r.serviceRating, 0);
-        return {
-          ...u,
-          qualityRating: Math.round((totalQuality / dealerReviews.length) * 10) / 10,
-          serviceRating: Math.round((totalService / dealerReviews.length) * 10) / 10,
-          reviewCount: dealerReviews.length,
-        };
-      });
-
-      return { ...state, reviews: [newReview, ...state.reviews], offers, users };
-    }
-
-    case 'MARK_NOTIFICATIONS_READ': {
-      const idSet = new Set(action.payload);
-      const notifications = state.notifications.map((n) =>
-        idSet.has(n.id) ? { ...n, read: true } : n
-      );
-      return { ...state, notifications };
-    }
-
-    default:
-      return state;
-  }
+interface ApproveParams {
+  offerId: string;
+  dealerNotes: string;
+  scheduledPickupWindow?: string;
+  deliveryFee?: number;
 }
 
 interface AppContextValue {
-  state: PersistedState;
-  dispatch: Dispatch<AppAction>;
-  currentUser: User | null;
+  session: Session | null;
+  currentUser: Profile | null;
+  listings: Listing[];
+  myOffers: Offer[];
+  incomingOffers: Offer[];
+  reviews: Review[];
+  notifications: AppNotification[];
+  categories: string[];
+  isDark: boolean;
+  loading: boolean;
+  authLoading: boolean;
+  customCategories: string[];
+  toggleTheme: () => void;
+  setDark: (v: boolean) => void;
+  signIn: (email: string, password: string, rememberMe: boolean) => Promise<{ error?: string }>;
+  signUp: (params: RegisterParams) => Promise<{ error?: string }>;
+  signOut: () => Promise<void>;
+  updateProfile: (updates: Partial<Pick<Profile, 'name' | 'farmName' | 'phone' | 'region' | 'province' | 'municipality'>>) => Promise<{ error?: string }>;
+  createListing: (params: ListingParams) => Promise<{ error?: string }>;
+  addCustomCategory: (name: string) => Promise<void>;
+  submitOffer: (params: OfferParams) => Promise<{ error?: string }>;
+  approveOffer: (params: ApproveParams) => Promise<{ error?: string }>;
+  rejectOffer: (offerId: string) => Promise<{ error?: string }>;
+  submitReview: (params: ReviewParams) => Promise<{ error?: string }>;
+  markNotificationsRead: (ids: string[]) => Promise<void>;
+  refresh: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, emptyState, loadState);
+  const [session, setSession] = useState<Session | null>(null);
+  const [currentUser, setCurrentUser] = useState<Profile | null>(null);
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [myOffers, setMyOffers] = useState<Offer[]>([]);
+  const [incomingOffers, setIncomingOffers] = useState<Offer[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
+  const [isDark, setIsDark] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // ---- Theme (still localStorage — it's a UI preference, not app data) ----
+  useEffect(() => {
+    const stored = localStorage.getItem('local-livestock-theme');
+    setIsDark(stored === 'dark');
+  }, []);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      if (state.rememberMe || state.currentUserId === null) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      }
-    } catch {
-      // storage full or unavailable; ignore
-    }
-  }, [state]);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    if (state.isDark) {
+    if (isDark) {
       document.documentElement.classList.add('dark');
+      localStorage.setItem('local-livestock-theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
+      localStorage.setItem('local-livestock-theme', 'light');
     }
-  }, [state.isDark]);
+  }, [isDark]);
 
-  const currentUser = state.users.find((u) => u.id === state.currentUserId) ?? null;
+  const toggleTheme = useCallback(() => setIsDark((d) => !d), []);
+  const setDark = useCallback((v: boolean) => setIsDark(v), []);
 
-  return (
-    <AppContext.Provider value={{ state, dispatch, currentUser }}>
-      {children}
-    </AppContext.Provider>
-  );
+  // ---- Auth state ----
+  useEffect(() => {
+    setAuthLoading(true);
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+      setAuthLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Sign out ephemeral (non-remember-me) sessions on tab close
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (sessionStorage.getItem('local-livestock-session') === 'ephemeral') {
+        supabase.auth.signOut();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
+  // ---- Load profile + app data when session changes ----
+  const loadProfile = useCallback(async (userId: string): Promise<Profile | null> => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return mapProfile(data as ProfileRow);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    if (!session?.user) {
+      setCurrentUser(null);
+      setListings([]);
+      setMyOffers([]);
+      setIncomingOffers([]);
+      setReviews([]);
+      setNotifications([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const userId = session.user.id;
+
+    const [profileRes, listingsRes, offersRes, reviewsRes, notifRes, catRes] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+      supabase.from('listings').select('*').order('created_at', { ascending: false }),
+      supabase.from('offers').select('*').order('created_at', { ascending: false }),
+      supabase.from('reviews').select('*').order('created_at', { ascending: false }),
+      supabase.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+      supabase.from('categories').select('name').order('name'),
+    ]);
+
+    const profile = profileRes.data ? mapProfile(profileRes.data as ProfileRow) : null;
+    setCurrentUser(profile);
+
+    // Build a dealer map for listing enrichment
+    const dealerIds = [...new Set((listingsRes.data as ListingRow[] || []).map((l) => l.dealer_id))];
+    const dealerMap = new Map<string, { name: string; farmName: string }>();
+    if (dealerIds.length > 0) {
+      const { data: dealers } = await supabase
+        .from('profiles')
+        .select('id, name, farm_name')
+        .in('id', dealerIds);
+      (dealers as ProfileRow[] || []).forEach((d) => {
+        dealerMap.set(d.id, { name: d.name, farmName: d.farm_name || d.name });
+      });
+    }
+
+    const mappedListings = (listingsRes.data as ListingRow[] || []).map((row) => {
+      const dealer = dealerMap.get(row.dealer_id);
+      return mapListing(row, dealer?.name ?? 'Unknown', dealer?.farmName ?? 'Unknown');
+    });
+    setListings(mappedListings);
+
+    const allOffers = (offersRes.data as OfferRow[] || []).map(mapOffer);
+    setMyOffers(allOffers.filter((o) => o.buyerId === userId));
+    setIncomingOffers(allOffers.filter((o) => o.dealerId === userId));
+
+    setReviews((reviewsRes.data as ReviewRow[] || []).map(mapReview));
+    setNotifications((notifRes.data as NotificationRow[] || []).map(mapNotification));
+    setCategories([...new Set([...DEFAULT_CATEGORIES, ...((catRes.data as { name: string }[] || []).map((c) => c.name))])]);
+
+    setLoading(false);
+  }, [session]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  // ---- Auth actions ----
+  const signIn = useCallback(async (email: string, password: string, rememberMe: boolean) => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) return { error: error.message };
+
+    if (!rememberMe) {
+      sessionStorage.setItem('local-livestock-session', 'ephemeral');
+    } else {
+      sessionStorage.removeItem('local-livestock-session');
+    }
+    return {};
+  }, []);
+
+  const signUp = useCallback(async (params: RegisterParams) => {
+    const { data, error } = await supabase.auth.signUp({
+      email: params.email,
+      password: params.password,
+      options: {
+        data: {
+          account_type: params.accountType,
+          name: params.name,
+          farm_name: params.farmName || null,
+          region: params.region,
+          province: params.province,
+          municipality: params.municipality,
+        },
+      },
+    });
+    if (error) return { error: error.message };
+    if (!data.user) return { error: 'Sign-up failed. Please try again.' };
+    return {};
+  }, []);
+
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut();
+    setCurrentUser(null);
+    setSession(null);
+  }, []);
+
+  // ---- Profile update ----
+  const updateProfile = useCallback(async (updates: Partial<Pick<Profile, 'name' | 'farmName' | 'phone' | 'region' | 'province' | 'municipality'>>) => {
+    if (!session?.user) return { error: 'Not authenticated' };
+    const row: Record<string, string | null> = {};
+    if (updates.name !== undefined) row.name = updates.name;
+    if (updates.farmName !== undefined) row.farm_name = updates.farmName || null;
+    if (updates.phone !== undefined) row.phone = updates.phone || null;
+    if (updates.region !== undefined) row.region = updates.region;
+    if (updates.province !== undefined) row.province = updates.province;
+    if (updates.municipality !== undefined) row.municipality = updates.municipality;
+
+    const { error } = await supabase.from('profiles').update(row).eq('id', session.user.id);
+    if (error) return { error: error.message };
+    await refresh();
+    return {};
+  }, [session, refresh]);
+
+  // ---- Listing creation ----
+  const createListing = useCallback(async (params: ListingParams) => {
+    if (!session?.user) return { error: 'Not authenticated' };
+    const { count } = await supabase.from('listings').select('*', { count: 'exact', head: true });
+    const batchNumber = `${params.category.slice(0, 2).toUpperCase()}-${new Date().getFullYear()}-${String((count ?? 0) + 1).padStart(4, '0')}`;
+
+    const { error } = await supabase.from('listings').insert({
+      dealer_id: session.user.id,
+      title: params.title,
+      category: params.category,
+      batch_number: batchNumber,
+      price_per_head: params.pricePerHead,
+      available_stock: params.availableStock,
+      original_stock: params.availableStock,
+      region: params.region,
+      province: params.province,
+      municipality: params.municipality,
+      description: params.description,
+      image_url: getCategoryImage(params.category),
+      is_active: true,
+    });
+    if (error) return { error: error.message };
+    await refresh();
+    return {};
+  }, [session, refresh]);
+
+  // ---- Custom category ----
+  const addCustomCategory = useCallback(async (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || categories.includes(trimmed)) return;
+    await supabase.from('categories').insert({ name: trimmed });
+    setCategories((prev) => [...new Set([...prev, trimmed])]);
+  }, [categories]);
+
+  // ---- Offer submission ----
+  const submitOffer = useCallback(async (params: OfferParams) => {
+    if (!session?.user) return { error: 'Not authenticated' };
+
+    const { error } = await supabase.from('offers').insert({
+      listing_id: params.listingId,
+      dealer_id: params.dealerId,
+      buyer_id: session.user.id,
+      buyer_name: params.buyerName,
+      buyer_contact: params.buyerContact,
+      quantity: params.quantity,
+      fulfillment_method: params.fulfillmentMethod,
+      preferred_date: params.preferredDate,
+      delivery_fee: params.deliveryFee ?? null,
+      status: 'PENDING',
+    });
+    if (error) return { error: error.message };
+
+    // Notify the dealer
+    await supabase.from('notifications').insert({
+      user_id: params.dealerId,
+      type: 'offer_received',
+      title: 'New Offer Received',
+      message: `${params.buyerName} requested ${params.quantity} head`,
+    });
+
+    await refresh();
+    return {};
+  }, [session, refresh]);
+
+  // ---- Approve offer (atomic RPC) ----
+  const approveOffer = useCallback(async (params: ApproveParams) => {
+    const { error } = await supabase.rpc('approve_offer', {
+      p_offer_id: params.offerId,
+      p_dealer_notes: params.dealerNotes,
+      p_scheduled_pickup_window: params.scheduledPickupWindow ?? null,
+      p_delivery_fee: params.deliveryFee ?? null,
+    });
+    if (error) return { error: error.message };
+    await refresh();
+    return {};
+  }, [refresh]);
+
+  // ---- Reject offer (atomic RPC) ----
+  const rejectOffer = useCallback(async (offerId: string) => {
+    const { error } = await supabase.rpc('reject_offer', { p_offer_id: offerId });
+    if (error) return { error: error.message };
+    await refresh();
+    return {};
+  }, [refresh]);
+
+  // ---- Submit review ----
+  const submitReview = useCallback(async (params: ReviewParams) => {
+    if (!session?.user) return { error: 'Not authenticated' };
+
+    const { error: reviewError } = await supabase.from('reviews').insert({
+      offer_id: params.offerId,
+      dealer_id: params.dealerId,
+      buyer_id: session.user.id,
+      quality_rating: params.qualityRating,
+      service_rating: params.serviceRating,
+      comment: params.comment,
+      buyer_name: params.buyerName,
+    });
+    if (reviewError) return { error: reviewError.message };
+
+    // Mark offer as rated
+    await supabase.from('offers').update({ rated: true }).eq('id', params.offerId);
+
+    await refresh();
+    return {};
+  }, [session, refresh]);
+
+  // ---- Mark notifications read ----
+  const markNotificationsRead = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return;
+    await supabase.from('notifications').update({ read: true }).in('id', ids);
+    setNotifications((prev) => prev.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n)));
+  }, []);
+
+  const value: AppContextValue = {
+    session,
+    currentUser,
+    listings,
+    myOffers,
+    incomingOffers,
+    reviews,
+    notifications,
+    categories,
+    isDark,
+    loading,
+    authLoading,
+    customCategories: categories.filter((c) => !DEFAULT_CATEGORIES.includes(c)),
+    toggleTheme,
+    setDark,
+    signIn,
+    signUp,
+    signOut,
+    updateProfile,
+    createListing,
+    addCustomCategory,
+    submitOffer,
+    approveOffer,
+    rejectOffer,
+    submitReview,
+    markNotificationsRead,
+    refresh,
+  };
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
 export function useApp() {
