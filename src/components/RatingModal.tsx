@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Star } from 'lucide-react';
+import { X, Star, AlertCircle, Loader2 } from 'lucide-react';
 import type { Offer, Listing } from '@/types';
 import { useApp } from '@/context/AppContext';
 import StarRating from '@/components/StarRating';
@@ -18,6 +18,7 @@ export default function RatingModal({ offer, listing, dealer, onClose }: RatingM
   const [comment, setComment] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     if (offer) {
@@ -25,6 +26,7 @@ export default function RatingModal({ offer, listing, dealer, onClose }: RatingM
       setServiceRating(0);
       setComment('');
       setSubmitted(false);
+      setErrorMsg('');
     }
   }, [offer]);
 
@@ -33,6 +35,7 @@ export default function RatingModal({ offer, listing, dealer, onClose }: RatingM
   const handleSubmit = async () => {
     if (qualityRating === 0 || serviceRating === 0) return;
     setBusy(true);
+    setErrorMsg('');
     const { error } = await submitReview({
       offerId: offer.id,
       dealerId: dealer.id,
@@ -42,7 +45,10 @@ export default function RatingModal({ offer, listing, dealer, onClose }: RatingM
       buyerName: offer.buyerName,
     });
     setBusy(false);
-    if (error) return;
+    if (error) {
+      setErrorMsg(error);
+      return;
+    }
     setSubmitted(true);
   };
 
@@ -119,11 +125,19 @@ export default function RatingModal({ offer, listing, dealer, onClose }: RatingM
                 />
               </div>
 
+              {errorMsg && (
+                <div className="p-3 rounded-lg flex items-start gap-2 text-xs" style={{ backgroundColor: 'color-mix(in srgb, var(--error) 10%, transparent)', color: 'var(--error)' }}>
+                  <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+                  <span>{errorMsg}</span>
+                </div>
+              )}
+
               <button
                 onClick={handleSubmit}
                 disabled={qualityRating === 0 || serviceRating === 0 || busy}
-                className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
+                {busy ? <Loader2 size={18} className="animate-spin" /> : null}
                 {busy ? 'Submitting...' : 'Submit Review'}
               </button>
             </div>

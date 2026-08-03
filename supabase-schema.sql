@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   email text NOT NULL,
   farm_name text,
   phone text,
+  avatar_url text,
   region text NOT NULL DEFAULT '',
   province text NOT NULL DEFAULT '',
   municipality text NOT NULL DEFAULT '',
@@ -126,6 +127,50 @@ DROP POLICY IF EXISTS "insert_own_offers" ON offers;
 CREATE POLICY "insert_own_offers" ON offers FOR INSERT
   TO authenticated WITH CHECK (auth.uid() = buyer_id);
 
+DROP POLICY IF EXISTS "update_own_offers" ON offers;
+CREATE POLICY "update_own_offers" ON offers FOR UPDATE
+  TO authenticated USING (auth.uid() = buyer_id OR auth.uid() = dealer_id)
+  WITH CHECK (auth.uid() = buyer_id OR auth.uid() = dealer_id);
+
+-- ============================================================
+-- TABLE: address_templates
+-- Saved shipping/contact templates for buyers (like Shopee/
+-- TikTok address templates). Each buyer can save multiple
+-- templates with full name, phone, region, province,
+-- municipality (barangay), and detailed address.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS address_templates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE,
+  label text NOT NULL DEFAULT 'Home',
+  full_name text NOT NULL,
+  phone_number text NOT NULL,
+  region text NOT NULL,
+  province text NOT NULL,
+  municipality text NOT NULL,
+  detailed_address text NOT NULL,
+  is_default boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE address_templates ENABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS idx_address_templates_user ON address_templates(user_id);
+
+DROP POLICY IF EXISTS "select_own_templates" ON address_templates;
+CREATE POLICY "select_own_templates" ON address_templates FOR SELECT
+  TO authenticated USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "insert_own_templates" ON address_templates;
+CREATE POLICY "insert_own_templates" ON address_templates FOR INSERT
+  TO authenticated WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "update_own_templates" ON address_templates;
+CREATE POLICY "update_own_templates" ON address_templates FOR UPDATE
+  TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "delete_own_templates" ON address_templates;
+CREATE POLICY "delete_own_templates" ON address_templates FOR DELETE
+  TO authenticated USING (auth.uid() = user_id);
+
 -- ============================================================
 -- TABLE: notifications
 -- System alerts linked to a specific user and optionally
@@ -182,6 +227,10 @@ CREATE POLICY "select_reviews" ON reviews FOR SELECT
 DROP POLICY IF EXISTS "insert_own_reviews" ON reviews;
 CREATE POLICY "insert_own_reviews" ON reviews FOR INSERT
   TO authenticated WITH CHECK (auth.uid() = buyer_id);
+
+DROP POLICY IF EXISTS "update_own_reviews" ON reviews;
+CREATE POLICY "update_own_reviews" ON reviews FOR UPDATE
+  TO authenticated USING (auth.uid() = buyer_id) WITH CHECK (auth.uid() = buyer_id);
 
 -- ============================================================
 -- TABLE: categories
@@ -373,6 +422,51 @@ $$;
 -- Grant execute on the stored procedures to authenticated users only
 GRANT EXECUTE ON FUNCTION approve_offer(uuid, text, text, int) TO authenticated;
 GRANT EXECUTE ON FUNCTION reject_offer(uuid) TO authenticated;
+
+-- ============================================================
+-- STORED PROCEDURE: send_dealer_reminder
+-- Called by a dealer to send a custom reminder/notification
+-- to the buyer of a specific offer. Validates that the
+-- caller is the dealer on the offer, then inserts a
+-- notification with type 'dealer_reminder' for the buyer.
+-- ============================================================
+CREATE OR REPLACE FUNCTION send_dealer_reminder(
+  p_offer_id uuid,
+  p_message text
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $
+DECLARE
+  v_offer RECORD;
+  v_notification_id uuid;
+BEGIN
+  SELECT buyer_id, dealer_id, listing_id INTO v_offer
+  FROM offers WHERE id = p_offer_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Offer not found';
+  END IF;
+
+  IF v_offer.dealer_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'Not authorized: only the dealer can send reminders for this offer';
+  END IF;
+
+  IF p_message IS NULL OR btrim(p_message) = '' THEN
+    RAISE EXCEPTION 'Message cannot be empty';
+  END IF;
+
+  INSERT INTO notifications (user_id, type, title, message, offer_id)
+  VALUES (v_offer.buyer_id, 'dealer_reminder', 'Dealer Reminder', p_message, p_offer_id)
+  RETURNING id INTO v_notification_id;
+
+  RETURN v_notification_id;
+END;
+$;
+
+REVOKE ALL ON FUNCTION send_dealer_reminder(uuid, text) FROM anon;
+GRANT EXECUTE ON FUNCTION send_dealer_reminder(uuid, text) TO authenticated;
 
 -- Revoke direct access to trigger functions (they should only
 -- fire automatically, never be called manually)

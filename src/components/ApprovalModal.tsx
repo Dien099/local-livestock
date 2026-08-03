@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { X, Check, Truck, Calendar, AlertCircle, Loader2 } from 'lucide-react';
-import type { Offer, Listing } from '@/types';
+import { X, Check, Truck, Calendar, AlertCircle, Loader2, User as UserIcon, Phone, MapPin, Mail, Send } from 'lucide-react';
+import type { Offer, Listing, Profile } from '@/types';
 import { useApp } from '@/context/AppContext';
 
 interface ApprovalModalProps {
@@ -11,13 +11,17 @@ interface ApprovalModalProps {
 }
 
 export default function ApprovalModal({ offer, listing, dealer, onClose }: ApprovalModalProps) {
-  const { approveOffer, rejectOffer } = useApp();
-  const [action, setAction] = useState<'approve' | 'reject' | null>(null);
+  const { approveOffer, rejectOffer, getBuyerProfile, sendDealerReminder } = useApp();
+  const [action, setAction] = useState<'approve' | 'reject' | 'reminder' | null>(null);
   const [dealerNotes, setDealerNotes] = useState('');
   const [pickupWindow, setPickupWindow] = useState('');
   const [deliveryFee, setDeliveryFee] = useState('0');
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [buyerProfile, setBuyerProfile] = useState<Profile | null>(null);
+  const [reminderMessage, setReminderMessage] = useState('');
+  const [reminderSent, setReminderSent] = useState(false);
 
   useEffect(() => {
     if (offer) {
@@ -26,13 +30,19 @@ export default function ApprovalModal({ offer, listing, dealer, onClose }: Appro
       setPickupWindow('');
       setDeliveryFee(String(offer.deliveryFee || 0));
       setDone(false);
+      setErrorMsg('');
+      setReminderMessage('');
+      setReminderSent(false);
+      setBuyerProfile(null);
+      getBuyerProfile(offer.buyerId).then(setBuyerProfile).catch(() => setBuyerProfile(null));
     }
-  }, [offer]);
+  }, [offer, getBuyerProfile]);
 
   if (!offer || !listing || !dealer) return null;
 
   const handleApprove = async () => {
     setBusy(true);
+    setErrorMsg('');
     const { error } = await approveOffer({
       offerId: offer.id,
       dealerNotes,
@@ -40,16 +50,32 @@ export default function ApprovalModal({ offer, listing, dealer, onClose }: Appro
       deliveryFee: offer.fulfillmentMethod === 'delivery' ? (parseInt(deliveryFee) || 0) : undefined,
     });
     setBusy(false);
-    if (error) { setAction(null); return; }
+    if (error) { setErrorMsg(error); setAction(null); return; }
     setDone(true);
   };
 
   const handleReject = async () => {
     setBusy(true);
+    setErrorMsg('');
     const { error } = await rejectOffer(offer.id);
     setBusy(false);
-    if (error) { setAction(null); return; }
+    if (error) { setErrorMsg(error); setAction(null); return; }
     setDone(true);
+  };
+
+  const handleSendReminder = async () => {
+    if (!reminderMessage.trim()) return;
+    setBusy(true);
+    setErrorMsg('');
+    const { error } = await sendDealerReminder(offer.id, reminderMessage.trim());
+    setBusy(false);
+    if (error) { setErrorMsg(error); return; }
+    setReminderSent(true);
+    setReminderMessage('');
+    setTimeout(() => {
+      setAction(null);
+      setReminderSent(false);
+    }, 2000);
   };
 
   return (
@@ -99,7 +125,7 @@ export default function ApprovalModal({ offer, listing, dealer, onClose }: Appro
                 </div>
               </div>
 
-              {/* Buyer info */}
+              {/* Buyer info from offer */}
               <div className="space-y-2 p-3 rounded-xl" style={{ backgroundColor: 'var(--bg)' }}>
                 <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Buyer Details</h3>
                 <div className="flex justify-between text-sm">
@@ -141,11 +167,83 @@ export default function ApprovalModal({ offer, listing, dealer, onClose }: Appro
                 )}
               </div>
 
+              {/* Buyer profile (from profiles table) */}
+              {buyerProfile && (
+                <div className="space-y-2 p-3 rounded-xl" style={{ backgroundColor: 'var(--bg)' }}>
+                  <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Buyer Profile</h3>
+                  <div className="flex items-center gap-3 mb-2">
+                    {buyerProfile.avatarUrl ? (
+                      <img src={buyerProfile.avatarUrl} alt={buyerProfile.name} className="w-12 h-12 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--primary), var(--secondary))' }}>
+                        {buyerProfile.name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{buyerProfile.name}</p>
+                      {buyerProfile.phone && (
+                        <p className="text-xs flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
+                          <Phone size={11} /> {buyerProfile.phone}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  {buyerProfile.email && (
+                    <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                      <Mail size={12} /> {buyerProfile.email}
+                    </div>
+                  )}
+                  {buyerProfile.municipality && (
+                    <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                      <MapPin size={12} /> {[buyerProfile.municipality, buyerProfile.province, buyerProfile.region].filter(Boolean).join(', ')}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Stock check */}
               {offer.quantity > listing.availableStock && (
                 <div className="p-3 rounded-lg flex items-center gap-2 text-xs" style={{ backgroundColor: 'color-mix(in srgb, var(--error) 10%, transparent)', color: 'var(--error)' }}>
                   <AlertCircle size={16} />
                   Requested quantity exceeds available stock. Approval will set stock to 0.
+                </div>
+              )}
+
+              {/* Reminder section */}
+              {action === 'reminder' && (
+                <div className="space-y-3 animate-fade-in">
+                  <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Send Reminder to Buyer</h3>
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    Send a custom notification (e.g. pickup deadlines, delay notices, weather/holiday alerts).
+                  </p>
+                  <textarea
+                    value={reminderMessage}
+                    onChange={(e) => setReminderMessage(e.target.value)}
+                    placeholder="e.g. Pickup deadline moved to Aug 20, 6:00 AM due to incoming storm..."
+                    rows={3}
+                    className="input-field resize-none"
+                  />
+                  {reminderSent && (
+                    <div className="p-3 rounded-lg text-xs flex items-center gap-2" style={{ backgroundColor: 'color-mix(in srgb, var(--success) 10%, transparent)', color: 'var(--success)' }}>
+                      <Check size={16} /> Reminder sent! The buyer will see it in their notifications.
+                    </div>
+                  )}
+                  {errorMsg && (
+                    <div className="p-3 rounded-lg text-xs flex items-center gap-2" style={{ backgroundColor: 'color-mix(in srgb, var(--error) 10%, transparent)', color: 'var(--error)' }}>
+                      <AlertCircle size={16} /> {errorMsg}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <button onClick={() => setAction(null)} className="btn-ghost py-2.5 flex-1">Cancel</button>
+                    <button
+                      onClick={handleSendReminder}
+                      disabled={!reminderMessage.trim() || busy}
+                      className="btn-primary py-2.5 flex-1 disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {busy ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                      Send
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -194,28 +292,41 @@ export default function ApprovalModal({ offer, listing, dealer, onClose }: Appro
                       className="input-field resize-none"
                     />
                   </div>
+                  {errorMsg && (
+                    <div className="p-3 rounded-lg text-xs flex items-center gap-2" style={{ backgroundColor: 'color-mix(in srgb, var(--error) 10%, transparent)', color: 'var(--error)' }}>
+                      <AlertCircle size={16} /> {errorMsg}
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* Action buttons */}
               {action === null ? (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setAction('approve')}
+                      className="py-3 rounded-lg font-semibold text-sm text-white transition-all active:scale-95"
+                      style={{ backgroundColor: 'var(--success)' }}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => setAction('reject')}
+                      className="py-3 rounded-lg font-semibold text-sm text-white transition-all active:scale-95"
+                      style={{ backgroundColor: 'var(--error)' }}
+                    >
+                      Reject
+                    </button>
+                  </div>
                   <button
-                    onClick={() => setAction('approve')}
-                    className="py-3 rounded-lg font-semibold text-sm text-white transition-all active:scale-95"
-                    style={{ backgroundColor: 'var(--success)' }}
+                    onClick={() => setAction('reminder')}
+                    className="btn-ghost w-full py-2.5 flex items-center justify-center gap-2 text-sm"
                   >
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => setAction('reject')}
-                    className="py-3 rounded-lg font-semibold text-sm text-white transition-all active:scale-95"
-                    style={{ backgroundColor: 'var(--error)' }}
-                  >
-                    Reject
+                    <Send size={16} /> Send Reminder to Buyer
                   </button>
                 </div>
-              ) : (
+              ) : action !== 'reminder' ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--text)' }}>
                     {action === 'approve' ? <Check size={16} style={{ color: 'var(--success)' }} /> : <X size={16} style={{ color: 'var(--error)' }} />}
@@ -236,7 +347,7 @@ export default function ApprovalModal({ offer, listing, dealer, onClose }: Appro
                     )}
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           </>
         )}

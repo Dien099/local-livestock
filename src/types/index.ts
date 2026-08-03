@@ -9,6 +9,7 @@ export interface Profile {
   email: string;
   farmName?: string | null;
   phone?: string | null;
+  avatarUrl?: string | null;
   region: string;
   province: string;
   municipality: string;
@@ -18,11 +19,28 @@ export interface Profile {
   createdAt: string;
 }
 
+export interface AddressTemplate {
+  id: string;
+  label: string;
+  fullName: string;
+  phoneNumber: string;
+  region: string;
+  province: string;
+  municipality: string;
+  detailedAddress: string;
+  isDefault: boolean;
+  createdAt: string;
+}
+
 export interface Listing {
   id: string;
   dealerId: string;
   dealerName: string;
   farmName: string;
+  dealerAvatarUrl?: string | null;
+  dealerQualityRating?: number;
+  dealerServiceRating?: number;
+  dealerReviewCount?: number;
   title: string;
   category: string;
   batchNumber: string;
@@ -71,7 +89,7 @@ export interface Review {
 export interface AppNotification {
   id: string;
   userId: string;
-  type: 'offer_received' | 'offer_approved' | 'offer_rejected' | 'offer_completed';
+  type: 'offer_received' | 'offer_approved' | 'offer_rejected' | 'offer_completed' | 'dealer_reminder';
   title: string;
   message: string;
   offerId?: string | null;
@@ -88,12 +106,27 @@ export interface ProfileRow {
   email: string;
   farm_name: string | null;
   phone: string | null;
+  avatar_url: string | null;
   region: string;
   province: string;
   municipality: string;
   quality_rating: number;
   service_rating: number;
   review_count: number;
+  created_at: string;
+}
+
+export interface AddressTemplateRow {
+  id: string;
+  user_id: string;
+  label: string;
+  full_name: string;
+  phone_number: string;
+  region: string;
+  province: string;
+  municipality: string;
+  detailed_address: string;
+  is_default: boolean;
   created_at: string;
 }
 
@@ -149,7 +182,7 @@ export interface ReviewRow {
 export interface NotificationRow {
   id: string;
   user_id: string;
-  type: 'offer_received' | 'offer_approved' | 'offer_rejected' | 'offer_completed';
+  type: 'offer_received' | 'offer_approved' | 'offer_rejected' | 'offer_completed' | 'dealer_reminder';
   title: string;
   message: string;
   offer_id: string | null;
@@ -167,6 +200,7 @@ export function mapProfile(r: ProfileRow): Profile {
     email: r.email,
     farmName: r.farm_name,
     phone: r.phone,
+    avatarUrl: r.avatar_url,
     region: r.region,
     province: r.province,
     municipality: r.municipality,
@@ -177,16 +211,36 @@ export function mapProfile(r: ProfileRow): Profile {
   };
 }
 
+export function mapAddressTemplate(r: AddressTemplateRow): AddressTemplate {
+  return {
+    id: r.id,
+    label: r.label,
+    fullName: r.full_name,
+    phoneNumber: r.phone_number,
+    region: r.region,
+    province: r.province,
+    municipality: r.municipality,
+    detailedAddress: r.detailed_address,
+    isDefault: r.is_default,
+    createdAt: r.created_at,
+  };
+}
+
 export function mapListing(
   r: ListingRow,
   dealerName: string,
-  farmName: string
+  farmName: string,
+  dealer?: { avatarUrl?: string | null; qualityRating?: number; serviceRating?: number; reviewCount?: number }
 ): Listing {
   return {
     id: r.id,
     dealerId: r.dealer_id,
     dealerName,
     farmName,
+    dealerAvatarUrl: dealer?.avatarUrl,
+    dealerQualityRating: dealer?.qualityRating,
+    dealerServiceRating: dealer?.serviceRating,
+    dealerReviewCount: dealer?.reviewCount,
     title: r.title,
     category: r.category,
     batchNumber: r.batch_number,

@@ -5,6 +5,7 @@ import { useApp } from '@/context/AppContext';
 import ListingCard from '@/components/ListingCard';
 import ProvinceFilter from '@/components/ProvinceFilter';
 import OfferModal from '@/components/OfferModal';
+import DealerReviewsModal from '@/components/DealerReviewsModal';
 
 export default function CustomerBrowse() {
   const { listings } = useApp();
@@ -12,6 +13,7 @@ export default function CustomerBrowse() {
   const [selectedRegion, setSelectedRegion] = useState('');
   const [selectedProvince, setSelectedProvince] = useState('');
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
+  const [reviewsDealer, setReviewsDealer] = useState<{ id: string; name: string; farmName: string; avatarUrl?: string | null } | null>(null);
 
   const filtered = listings.filter((l) => {
     const regionMatch = !selectedRegion || l.region === selectedRegion;
@@ -65,12 +67,25 @@ export default function CustomerBrowse() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map((listing) => (
-            <ListingCard key={listing.id} listing={listing} onClick={() => setSelectedListing(listing)} />
+            <ListingCard
+              key={listing.id}
+              listing={listing}
+              onClick={() => setSelectedListing(listing)}
+              onDealerClick={() => setReviewsDealer({ id: listing.dealerId, name: listing.dealerName, farmName: listing.farmName, avatarUrl: listing.dealerAvatarUrl })}
+            />
           ))}
         </div>
       )}
 
       <OfferModal listing={selectedListing} onClose={() => setSelectedListing(null)} />
+
+      <DealerReviewsModal
+        dealerId={reviewsDealer?.id ?? null}
+        dealerName={reviewsDealer?.name ?? ''}
+        farmName={reviewsDealer?.farmName}
+        avatarUrl={reviewsDealer?.avatarUrl}
+        onClose={() => setReviewsDealer(null)}
+      />
     </div>
   );
 }

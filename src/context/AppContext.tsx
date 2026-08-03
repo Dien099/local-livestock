@@ -3,9 +3,10 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import {
   type Profile, type Listing, type Offer, type Review, type AppNotification,
-  type AccountType, type FulfillmentMethod,
+  type AddressTemplate, type AccountType, type FulfillmentMethod,
   type ProfileRow, type ListingRow, type OfferRow, type ReviewRow, type NotificationRow,
-  mapProfile, mapListing, mapOffer, mapReview, mapNotification,
+  type AddressTemplateRow,
+  mapProfile, mapListing, mapOffer, mapReview, mapNotification, mapAddressTemplate,
 } from '@/types';
 import { getCategoryImage } from '@/data/mockData';
 import { DEFAULT_CATEGORIES } from '@/data/regions';
@@ -60,6 +61,17 @@ interface ApproveParams {
   deliveryFee?: number;
 }
 
+interface AddressTemplateParams {
+  label: string;
+  fullName: string;
+  phoneNumber: string;
+  region: string;
+  province: string;
+  municipality: string;
+  detailedAddress: string;
+  isDefault?: boolean;
+}
+
 interface AppContextValue {
   session: Session | null;
   currentUser: Profile | null;
@@ -68,6 +80,7 @@ interface AppContextValue {
   incomingOffers: Offer[];
   reviews: Review[];
   notifications: AppNotification[];
+  addressTemplates: AddressTemplate[];
   categories: string[];
   isDark: boolean;
   loading: boolean;
@@ -79,12 +92,19 @@ interface AppContextValue {
   signUp: (params: RegisterParams) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<Pick<Profile, 'name' | 'farmName' | 'phone' | 'region' | 'province' | 'municipality'>>) => Promise<{ error?: string }>;
+  uploadAvatar: (file: File) => Promise<{ error?: string }>;
   createListing: (params: ListingParams) => Promise<{ error?: string }>;
   addCustomCategory: (name: string) => Promise<void>;
   submitOffer: (params: OfferParams) => Promise<{ error?: string }>;
   approveOffer: (params: ApproveParams) => Promise<{ error?: string }>;
   rejectOffer: (offerId: string) => Promise<{ error?: string }>;
   submitReview: (params: ReviewParams) => Promise<{ error?: string }>;
+  sendDealerReminder: (offerId: string, message: string) => Promise<{ error?: string }>;
+  getAddressTemplates: () => Promise<void>;
+  saveAddressTemplate: (params: AddressTemplateParams) => Promise<{ error?: string }>;
+  deleteAddressTemplate: (id: string) => Promise<{ error?: string }>;
+  setDefaultAddressTemplate: (id: string) => Promise<{ error?: string }>;
+  getBuyerProfile: (buyerId: string) => Promise<Profile | null>;
   markNotificationsRead: (ids: string[]) => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -99,6 +119,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [incomingOffers, setIncomingOffers] = useState<Offer[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [addressTemplates, setAddressTemplates] = useState<AddressTemplate[]>([]);
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [isDark, setIsDark] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -151,17 +172,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ---- Load profile + app data when session changes ----
-  const loadProfile = useCallback(async (userId: string): Promise<Profile | null> => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (error || !data) return null;
-    return mapProfile(data as ProfileRow);
-  }, []);
-
   const refresh = useCallback(async () => {
     if (!session?.user) {
       setCurrentUser(null);
@@ -170,6 +180,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setIncomingOffers([]);
       setReviews([]);
       setNotifications([]);
+      setAddressTemplates([]);
       setLoading(false);
       return;
     }
@@ -177,34 +188,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     const userId = session.user.id;
 
-    const [profileRes, listingsRes, offersRes, reviewsRes, notifRes, catRes] = await Promise.all([
+    const [profileRes, listingsRes, offersRes, reviewsRes, notifRes, catRes, templatesRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
       supabase.from('listings').select('*').order('created_at', { ascending: false }),
       supabase.from('offers').select('*').order('created_at', { ascending: false }),
       supabase.from('reviews').select('*').order('created_at', { ascending: false }),
       supabase.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
       supabase.from('categories').select('name').order('name'),
+      supabase.from('address_templates').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
     ]);
 
     const profile = profileRes.data ? mapProfile(profileRes.data as ProfileRow) : null;
     setCurrentUser(profile);
 
-    // Build a dealer map for listing enrichment
+    // Build a dealer map for listing enrichment — now includes ratings + avatar
     const dealerIds = [...new Set((listingsRes.data as ListingRow[] || []).map((l) => l.dealer_id))];
-    const dealerMap = new Map<string, { name: string; farmName: string }>();
+    const dealerMap = new Map<string, { name: string; farmName: string; avatarUrl: string | null; qualityRating: number; serviceRating: number; reviewCount: number }>();
     if (dealerIds.length > 0) {
       const { data: dealers } = await supabase
         .from('profiles')
-        .select('id, name, farm_name')
+        .select('id, name, farm_name, avatar_url, quality_rating, service_rating, review_count')
         .in('id', dealerIds);
       (dealers as ProfileRow[] || []).forEach((d) => {
-        dealerMap.set(d.id, { name: d.name, farmName: d.farm_name || d.name });
+        dealerMap.set(d.id, {
+          name: d.name,
+          farmName: d.farm_name || d.name,
+          avatarUrl: d.avatar_url,
+          qualityRating: Number(d.quality_rating),
+          serviceRating: Number(d.service_rating),
+          reviewCount: d.review_count,
+        });
       });
     }
 
     const mappedListings = (listingsRes.data as ListingRow[] || []).map((row) => {
       const dealer = dealerMap.get(row.dealer_id);
-      return mapListing(row, dealer?.name ?? 'Unknown', dealer?.farmName ?? 'Unknown');
+      return mapListing(
+        row,
+        dealer?.name ?? 'Unknown',
+        dealer?.farmName ?? 'Unknown',
+        dealer ? { avatarUrl: dealer.avatarUrl, qualityRating: dealer.qualityRating, serviceRating: dealer.serviceRating, reviewCount: dealer.reviewCount } : undefined
+      );
     });
     setListings(mappedListings);
 
@@ -214,6 +238,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     setReviews((reviewsRes.data as ReviewRow[] || []).map(mapReview));
     setNotifications((notifRes.data as NotificationRow[] || []).map(mapNotification));
+    setAddressTemplates((templatesRes.data as AddressTemplateRow[] || []).map(mapAddressTemplate));
     setCategories([...new Set([...DEFAULT_CATEGORIES, ...((catRes.data as { name: string }[] || []).map((c) => c.name))])]);
 
     setLoading(false);
@@ -278,6 +303,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const { error } = await supabase.from('profiles').update(row).eq('id', session.user.id);
     if (error) return { error: error.message };
+    await refresh();
+    return {};
+  }, [session, refresh]);
+
+  // ---- Avatar upload ----
+  const uploadAvatar = useCallback(async (file: File) => {
+    if (!session?.user) return { error: 'Not authenticated' };
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const filePath = `${session.user.id}/avatar.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(filePath, file, { upsert: true });
+    if (uploadError) return { error: uploadError.message };
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(filePath);
+
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ avatar_url: publicUrl })
+      .eq('id', session.user.id);
+    if (updateError) return { error: updateError.message };
+
     await refresh();
     return {};
   }, [session, refresh]);
@@ -384,11 +434,97 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (reviewError) return { error: reviewError.message };
 
     // Mark offer as rated
-    await supabase.from('offers').update({ rated: true }).eq('id', params.offerId);
+    const { error: offerError } = await supabase
+      .from('offers')
+      .update({ rated: true })
+      .eq('id', params.offerId);
+    if (offerError) return { error: offerError.message };
 
     await refresh();
     return {};
   }, [session, refresh]);
+
+  // ---- Send dealer reminder to buyer ----
+  const sendDealerReminder = useCallback(async (offerId: string, message: string) => {
+    const { error } = await supabase.rpc('send_dealer_reminder', {
+      p_offer_id: offerId,
+      p_message: message,
+    });
+    if (error) return { error: error.message };
+    await refresh();
+    return {};
+  }, [refresh]);
+
+  // ---- Address templates ----
+  const getAddressTemplates = useCallback(async () => {
+    if (!session?.user) return;
+    const { data, error } = await supabase
+      .from('address_templates')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false });
+    if (error) return;
+    setAddressTemplates((data as AddressTemplateRow[] || []).map(mapAddressTemplate));
+  }, [session]);
+
+  const saveAddressTemplate = useCallback(async (params: AddressTemplateParams) => {
+    if (!session?.user) return { error: 'Not authenticated' };
+
+    if (params.isDefault) {
+      await supabase
+        .from('address_templates')
+        .update({ is_default: false })
+        .eq('user_id', session.user.id);
+    }
+
+    const { error } = await supabase.from('address_templates').insert({
+      user_id: session.user.id,
+      label: params.label,
+      full_name: params.fullName,
+      phone_number: params.phoneNumber,
+      region: params.region,
+      province: params.province,
+      municipality: params.municipality,
+      detailed_address: params.detailedAddress,
+      is_default: params.isDefault ?? false,
+    });
+    if (error) return { error: error.message };
+    await getAddressTemplates();
+    return {};
+  }, [session, getAddressTemplates]);
+
+  const deleteAddressTemplate = useCallback(async (id: string) => {
+    const { error } = await supabase.from('address_templates').delete().eq('id', id);
+    if (error) return { error: error.message };
+    await getAddressTemplates();
+    return {};
+  }, [getAddressTemplates]);
+
+  const setDefaultAddressTemplate = useCallback(async (id: string) => {
+    if (!session?.user) return { error: 'Not authenticated' };
+    await supabase
+      .from('address_templates')
+      .update({ is_default: false })
+      .eq('user_id', session.user.id);
+    const { error } = await supabase
+      .from('address_templates')
+      .update({ is_default: true })
+      .eq('id', id);
+    if (error) return { error: error.message };
+    await getAddressTemplates();
+    return {};
+  }, [session, getAddressTemplates]);
+
+  // ---- Get buyer profile (for dealers viewing buyer details) ----
+  const getBuyerProfile = useCallback(async (buyerId: string): Promise<Profile | null> => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', buyerId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return mapProfile(data as ProfileRow);
+  }, []);
 
   // ---- Mark notifications read ----
   const markNotificationsRead = useCallback(async (ids: string[]) => {
@@ -405,6 +541,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     incomingOffers,
     reviews,
     notifications,
+    addressTemplates,
     categories,
     isDark,
     loading,
@@ -416,12 +553,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     signUp,
     signOut,
     updateProfile,
+    uploadAvatar,
     createListing,
     addCustomCategory,
     submitOffer,
     approveOffer,
     rejectOffer,
     submitReview,
+    sendDealerReminder,
+    getAddressTemplates,
+    saveAddressTemplate,
+    deleteAddressTemplate,
+    setDefaultAddressTemplate,
+    getBuyerProfile,
     markNotificationsRead,
     refresh,
   };

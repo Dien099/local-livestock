@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Bell, Check, CheckCircle2, XCircle, Package, Clock, Inbox } from 'lucide-react';
+import { useState } from 'react';
+import { Bell, Check, CheckCircle2, XCircle, Package, Clock, Inbox, MessageSquare } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import BackButton from '@/components/BackButton';
 import type { AppNotification } from '@/types';
@@ -9,6 +9,7 @@ const ICON_MAP = {
   offer_approved: CheckCircle2,
   offer_rejected: XCircle,
   offer_completed: Check,
+  dealer_reminder: MessageSquare,
 };
 
 const COLOR_MAP = {
@@ -16,6 +17,7 @@ const COLOR_MAP = {
   offer_approved: 'var(--success)',
   offer_rejected: 'var(--error)',
   offer_completed: 'var(--secondary)',
+  dealer_reminder: 'var(--primary)',
 };
 
 interface NotificationsViewProps {
@@ -28,15 +30,6 @@ export default function NotificationsView({ onBack, homeLabel }: NotificationsVi
 
   const myNotifications = notifications.filter((n) => n.userId === currentUser?.id);
   const unread = myNotifications.filter((n) => !n.read);
-
-  useEffect(() => {
-    if (unread.length > 0) {
-      const timer = setTimeout(() => {
-        markNotificationsRead(unread.map((n) => n.id));
-      }, 1200);
-      return () => clearTimeout(timer);
-    }
-  }, [unread.length, markNotificationsRead, unread]);
 
   const timeAgo = (iso: string): string => {
     const diff = Date.now() - new Date(iso).getTime();
@@ -76,11 +69,22 @@ export default function NotificationsView({ onBack, homeLabel }: NotificationsVi
           <Inbox size={40} className="mx-auto mb-3" style={{ color: 'var(--text-muted)' }} />
           <p className="text-base font-semibold mb-1" style={{ color: 'var(--text)' }}>You're all caught up</p>
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            Notifications about new offers, approvals, and transaction updates will appear here.
+            Notifications about new offers, approvals, transaction updates, and dealer reminders will appear here.
           </p>
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <>
+          {unread.length > 0 && (
+            <div className="mb-4">
+              <button
+                onClick={() => markNotificationsRead(unread.map((n) => n.id))}
+                className="btn-ghost text-sm flex items-center gap-2"
+              >
+                <Check size={16} /> Mark all as read
+              </button>
+            </div>
+          )}
+          <div className="space-y-2.5">
           {myNotifications.map((n: AppNotification) => {
             const Icon = ICON_MAP[n.type];
             const color = COLOR_MAP[n.type];
@@ -113,7 +117,8 @@ export default function NotificationsView({ onBack, homeLabel }: NotificationsVi
               </div>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
     </div>
   );

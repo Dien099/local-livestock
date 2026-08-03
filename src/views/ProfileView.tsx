@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { User as UserIcon, Store, Mail, Phone, MapPin, Star, Edit2, Check, X, ShoppingBag, Package, TrendingDown, Calendar } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { User as UserIcon, Store, Mail, Phone, MapPin, Star, Edit2, Check, X, ShoppingBag, Package, TrendingDown, Calendar, Camera, Loader2 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import RegionProvinceSelector from '@/components/RegionProvinceSelector';
 import StarRating from '@/components/StarRating';
@@ -11,7 +11,7 @@ interface ProfileViewProps {
 }
 
 export default function ProfileView({ onBack, homeLabel }: ProfileViewProps) {
-  const { currentUser, updateProfile, reviews, myOffers, listings } = useApp();
+  const { currentUser, updateProfile, uploadAvatar, reviews, myOffers, listings } = useApp();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(currentUser?.name ?? '');
   const [farmName, setFarmName] = useState(currentUser?.farmName ?? '');
@@ -20,6 +20,9 @@ export default function ProfileView({ onBack, homeLabel }: ProfileViewProps) {
   const [province, setProvince] = useState(currentUser?.province ?? '');
   const [municipality, setMunicipality] = useState(currentUser?.municipality ?? '');
   const [saving, setSaving] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!currentUser) return null;
 
@@ -42,14 +45,26 @@ export default function ProfileView({ onBack, homeLabel }: ProfileViewProps) {
     setEditing(false);
   };
 
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setAvatarError('Image must be under 2MB');
+      return;
+    }
+    setAvatarUploading(true);
+    setAvatarError('');
+    const { error } = await uploadAvatar(file);
+    setAvatarUploading(false);
+    if (error) setAvatarError(error);
+  };
+
   const dealerReviews = reviews.filter((r) => r.dealerId === currentUser.id);
   const completedOffers = myOffers.filter((o) => o.status === 'COMPLETED' || o.status === 'APPROVED');
   const myListings = listings.filter((l) => l.dealerId === currentUser.id);
   const totalStock = myListings.reduce((s, l) => s + l.availableStock, 0);
   const totalSold = myListings.reduce((s, l) => s + (l.originalStock - l.availableStock), 0);
-
   const getListing = (id: string) => listings.find((l) => l.id === id);
-
   const avgRating = currentUser.reviewCount > 0 ? (currentUser.qualityRating + currentUser.serviceRating) / 2 : 0;
 
   return (
@@ -82,9 +97,33 @@ export default function ProfileView({ onBack, homeLabel }: ProfileViewProps) {
       <div className="card p-6">
         <div className="flex flex-col sm:flex-row gap-6">
           <div className="flex flex-col items-center sm:items-start">
-            <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--primary), var(--secondary))' }}>
-              {currentUser.name.charAt(0).toUpperCase()}
+            {/* Avatar with upload */}
+            <div className="relative group">
+              {currentUser.avatarUrl ? (
+                <img src={currentUser.avatarUrl} alt={currentUser.name} className="w-20 h-20 rounded-2xl object-cover" />
+              ) : (
+                <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--primary), var(--secondary))' }}>
+                  {currentUser.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={avatarUploading}
+                className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full flex items-center justify-center text-white shadow-lg transition-transform hover:scale-110 active:scale-95"
+                style={{ backgroundColor: 'var(--primary)' }}
+                aria-label="Upload profile picture"
+              >
+                {avatarUploading ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleAvatarChange}
+                className="hidden"
+              />
             </div>
+            {avatarError && <p className="text-xs mt-2 text-center max-w-[120px]" style={{ color: 'var(--error)' }}>{avatarError}</p>}
             {isDealer && currentUser.reviewCount > 0 && (
               <div className="mt-3 text-center sm:text-left">
                 <StarRating value={avgRating} size={16} />
@@ -194,7 +233,7 @@ export default function ProfileView({ onBack, homeLabel }: ProfileViewProps) {
               <Star size={16} style={{ color: 'var(--accent)' }} />
               <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Reviews</span>
             </div>
-            <span className="text-2xl font-bold" style={{ color: 'var(--text)' }}>{currentUser.reviewCount}</span>
+            <span className="text-2xl font-bold" style={{ qualityRating: 0 }, { color: 'var(--text)' }}>{currentUser.reviewCount}</span>
           </div>
         </div>
       ) : (

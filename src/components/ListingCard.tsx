@@ -1,14 +1,19 @@
 import type { Listing } from '@/types';
-import { MapPin, TrendingDown, Package } from 'lucide-react';
+import { MapPin, TrendingDown, Package, Star } from 'lucide-react';
+import StarRating from '@/components/StarRating';
 
 interface ListingCardProps {
   listing: Listing;
   onClick: () => void;
+  onDealerClick?: () => void;
 }
 
-export default function ListingCard({ listing, onClick }: ListingCardProps) {
+export default function ListingCard({ listing, onClick, onDealerClick }: ListingCardProps) {
   const stockPercent = listing.originalStock > 0 ? (listing.availableStock / listing.originalStock) * 100 : 0;
   const isLowStock = listing.availableStock <= 50;
+  const avgRating = listing.dealerReviewCount && listing.dealerReviewCount > 0
+    ? ((listing.dealerQualityRating ?? 0) + (listing.dealerServiceRating ?? 0)) / 2
+    : null;
 
   return (
     <button
@@ -86,6 +91,19 @@ export default function ListingCard({ listing, onClick }: ListingCardProps) {
           </div>
         </div>
 
+        {/* Dealer rating row */}
+        {avgRating !== null && (
+          <div className="flex items-center gap-1.5">
+            <StarRating value={avgRating} size={13} />
+            <span className="text-xs font-semibold" style={{ color: 'var(--text)' }}>
+              {avgRating.toFixed(1)}
+            </span>
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              ({listing.dealerReviewCount} review{listing.dealerReviewCount !== 1 ? 's' : ''})
+            </span>
+          </div>
+        )}
+
         <div className="flex items-end justify-between pt-1">
           <div>
             <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Price per head</span>
@@ -93,11 +111,32 @@ export default function ListingCard({ listing, onClick }: ListingCardProps) {
               ₱{listing.pricePerHead.toLocaleString()}
             </div>
           </div>
-          {listing.farmName && (
-            <div className="text-right">
-              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{listing.farmName}</span>
-            </div>
-          )}
+          <div className="text-right">
+            {listing.dealerAvatarUrl ? (
+              <img
+                src={listing.dealerAvatarUrl}
+                alt={listing.farmName}
+                className="w-8 h-8 rounded-full object-cover border-2"
+                style={{ borderColor: 'var(--border)' }}
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: 'linear-gradient(135deg, var(--primary), var(--secondary))' }}>
+                {listing.farmName.charAt(0).toUpperCase()}
+              </div>
+            )}
+            {onDealerClick ? (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDealerClick(); }}
+                className="text-xs mt-0.5 hover:underline flex items-center gap-0.5"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                <Star size={10} className="fill-current" style={{ color: 'var(--accent)' }} />
+                {listing.farmName}
+              </button>
+            ) : (
+              <span className="text-xs mt-0.5 block" style={{ color: 'var(--text-muted)' }}>{listing.farmName}</span>
+            )}
+          </div>
         </div>
       </div>
     </button>
