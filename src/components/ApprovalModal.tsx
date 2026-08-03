@@ -133,6 +133,12 @@ export default function ApprovalModal({ offer, listing, dealer, onClose }: Appro
                     <span className="font-semibold" style={{ color: 'var(--text)' }}>{offer.preferredDate}</span>
                   </div>
                 )}
+                {offer.deliveryAddress && (
+                  <div className="flex justify-between text-sm">
+                    <span style={{ color: 'var(--text-muted)' }}>Delivery Address</span>
+                    <span className="font-semibold text-right max-w-[60%]" style={{ color: 'var(--text)' }}>{offer.deliveryAddress}</span>
+                  </div>
+                )}
               </div>
 
               {/* Stock check */}

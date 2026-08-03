@@ -126,6 +126,7 @@ export interface OfferRow {
   fulfillment_method: FulfillmentMethod;
   preferred_date: string | null;
   delivery_fee: number | null;
+  delivery_address: string | null;
   dealer_notes: string | null;
   scheduled_pickup_window: string | null;
   status: OfferStatus;
@@ -214,6 +215,7 @@ export function mapOffer(r: OfferRow): Offer {
     fulfillmentMethod: r.fulfillment_method,
     preferredDate: r.preferred_date,
     deliveryFee: r.delivery_fee,
+    deliveryAddress: r.delivery_address,
     dealerNotes: r.dealer_notes,
     scheduledPickupWindow: r.scheduled_pickup_window,
     status: r.status,

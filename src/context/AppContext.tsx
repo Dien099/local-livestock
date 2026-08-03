@@ -30,6 +30,7 @@ interface OfferParams {
   fulfillmentMethod: FulfillmentMethod;
   preferredDate: string;
   deliveryFee?: number;
+  deliveryAddress?: string;
 }
 
 interface ListingParams {
@@ -329,6 +330,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       fulfillment_method: params.fulfillmentMethod,
       preferred_date: params.preferredDate,
       delivery_fee: params.deliveryFee ?? null,
+      delivery_address: params.deliveryAddress || null,
       status: 'PENDING',
     });
     if (error) return { error: error.message };

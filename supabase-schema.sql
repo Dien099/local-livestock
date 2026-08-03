@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS offers (
   fulfillment_method text NOT NULL DEFAULT 'pickup' CHECK (fulfillment_method IN ('pickup','delivery')),
   preferred_date text,
   delivery_fee int,
+  delivery_address text,
   dealer_notes text,
   scheduled_pickup_window text,
   status text NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','APPROVED','REJECTED','COMPLETED')),

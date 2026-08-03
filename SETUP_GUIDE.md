@@ -317,6 +317,117 @@ If you ever need to add or change an environment variable on Vercel:
 
 ---
 
+## Part 6: Supabase Dashboard Configuration
+
+These settings ensure login/signup redirects work correctly and
+email verification doesn't block you during testing.
+
+### Step 6.1 — Set the Site URL and Redirect URLs
+
+The **Site URL** is where Supabase sends users after they click an
+email confirmation link. The **Redirect URLs** are the URLs Supabase
+is allowed to redirect to after authentication. If these are wrong,
+users see an error after signing up or logging in.
+
+1. Go to your **Supabase dashboard** (https://supabase.com → your project)
+2. In the **left sidebar**, click the **gears icon** (Project Settings)
+3. Click **"Authentication"** in the settings menu
+4. Scroll down to the **"URL Configuration"** section
+5. In the **Site URL** field, enter your production URL:
+   ```
+   https://your-project-name.vercel.app
+   ```
+   (Replace with your actual Vercel URL from Part 4)
+6. In the **Redirect URLs** section, click **"Add URL"** and add these
+   two URLs — one for local development and one for production:
+   ```
+   http://localhost:5173
+   https://your-project-name.vercel.app
+   ```
+   (Replace the second one with your actual Vercel URL)
+7. Click the **"Save"** button at the bottom
+
+> **Why both URLs?** During development you'll test on
+> `http://localhost:5173`. After deploying, you'll test on your
+> Vercel URL. Supabase will only redirect to URLs that are on this
+> list — so both need to be here.
+
+### Step 6.2 — Configure Email Authentication
+
+By default, Supabase requires new users to confirm their email
+before they can sign in. During testing, this can be annoying
+because you have to check your inbox every time. Here's how to
+manage this:
+
+1. In the Supabase dashboard, click the **gears icon** (Project Settings)
+2. Click **"Authentication"**
+3. Click **"Providers"** in the submenu
+4. You'll see **"Email"** listed — it should be **Enabled** by default
+   (the toggle is on). If it's off, click the toggle to turn it on
+5. Click on the **"Email"** row to expand its settings
+6. Find the **"Confirm Email"** toggle:
+   - **If you want instant sign-in during testing**: turn this OFF.
+     Users can sign in immediately without checking their email.
+     This is recommended while you're building and testing.
+   - **If you want email verification for production**: leave this ON.
+     New users must click a link in their inbox before they can log in.
+     This is more secure and recommended for a live app with real users.
+7. Click **"Save"** if you made changes
+
+> **Recommendation**: Turn "Confirm Email" OFF while you're testing
+> the app. Once everything works and you're ready to share it with
+> real users, come back here and turn it ON.
+
+### Step 6.3 — Verify the Profile Trigger is Working
+
+This app uses a database trigger that automatically creates a
+profile row whenever a new user signs up. If this trigger is missing
+or broken, new users will see errors because their profile won't exist.
+
+To verify it's working:
+
+1. In the Supabase dashboard, click **"Table Editor"** in the left sidebar
+2. Click the **"profiles"** table
+3. You should see rows here for every user who has signed up
+4. If you just signed up and don't see your row, the trigger may be missing
+
+If the trigger is missing, open the **SQL Editor** and paste this
+block, then click Run:
+
+```sql
+-- Re-create the profile trigger if it's missing
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $
+BEGIN
+  INSERT INTO public.profiles (id, account_type, name, email, farm_name, region, province, municipality)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'account_type', 'customer'),
+    COALESCE(NEW.raw_user_meta_data->>'name', ''),
+    COALESCE(NEW.email, ''),
+    NEW.raw_user_meta_data->>'farm_name',
+    COALESCE(NEW.raw_user_meta_data->>'region', ''),
+    COALESCE(NEW.raw_user_meta_data->>'province', ''),
+    COALESCE(NEW.raw_user_meta_data->>'municipality', '')
+  );
+  RETURN NEW;
+END;
+$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+```
+
+After running this, any new user who signs up will automatically
+get a profile row created.
+
+---
+
 ## Quick Troubleshooting
 
 **"I see a blank page on my live site"**

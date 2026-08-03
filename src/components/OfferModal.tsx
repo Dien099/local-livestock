@@ -10,7 +10,7 @@ interface OfferModalProps {
 }
 
 export default function OfferModal({ listing, onClose }: OfferModalProps) {
-  const { listings, submitOffer, currentUser } = useApp();
+  const { submitOffer, currentUser } = useApp();
   const [quantity, setQuantity] = useState('1');
   const [fulfillment, setFulfillment] = useState<FulfillmentMethod>('pickup');
   const [preferredDate, setPreferredDate] = useState('');
@@ -20,6 +20,8 @@ export default function OfferModal({ listing, onClose }: OfferModalProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (listing && currentUser) {
@@ -29,6 +31,7 @@ export default function OfferModal({ listing, onClose }: OfferModalProps) {
       setBuyerName(currentUser.name);
       setBuyerContact('');
       setDeliveryFee('0');
+      setDeliveryAddress('');
       setErrors({});
       setSubmitted(false);
       setSubmitError('');
@@ -51,11 +54,10 @@ export default function OfferModal({ listing, onClose }: OfferModalProps) {
     if (qtyNum < 1) e.quantity = 'Quantity must be at least 1';
     if (qtyNum > listing.availableStock) e.quantity = `Only ${listing.availableStock} available`;
     if (!preferredDate) e.preferredDate = 'Please select a preferred date';
+    if (fulfillment === 'delivery' && !deliveryAddress.trim()) e.deliveryAddress = 'Delivery address is required';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
-
-  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
     if (!validate() || !currentUser) return;
@@ -69,6 +71,7 @@ export default function OfferModal({ listing, onClose }: OfferModalProps) {
       fulfillmentMethod: fulfillment,
       preferredDate,
       deliveryFee: fulfillment === 'delivery' ? feeNum : undefined,
+      deliveryAddress: fulfillment === 'delivery' ? deliveryAddress.trim() : undefined,
     });
     setSubmitting(false);
     if (error) {
@@ -233,19 +236,34 @@ export default function OfferModal({ listing, onClose }: OfferModalProps) {
               </div>
 
               {fulfillment === 'delivery' && (
-                <div className="animate-fade-in">
-                  <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--text-muted)' }}>
-                    Offered Delivery Fee (₱)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={deliveryFee}
-                    onChange={(e) => setDeliveryFee(e.target.value)}
-                    onBlur={() => { if (deliveryFee === '') setDeliveryFee('0'); }}
-                    className="input-field"
-                    placeholder="0"
-                  />
+                <div className="animate-fade-in space-y-3">
+                  <div>
+                    <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--text-muted)' }}>
+                      Offered Delivery Fee (₱)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={deliveryFee}
+                      onChange={(e) => setDeliveryFee(e.target.value)}
+                      onBlur={() => { if (deliveryFee === '') setDeliveryFee('0'); }}
+                      className="input-field"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--text-muted)' }}>
+                      Delivery Address
+                    </label>
+                    <textarea
+                      value={deliveryAddress}
+                      onChange={(e) => setDeliveryAddress(e.target.value)}
+                      placeholder="Enter full delivery address..."
+                      rows={2}
+                      className="input-field resize-none"
+                    />
+                    {errors.deliveryAddress && <p className="text-xs mt-1 flex items-center gap-1" style={{ color: 'var(--error)' }}><AlertCircle size={12} />{errors.deliveryAddress}</p>}
+                  </div>
                 </div>
               )}
 
@@ -274,6 +292,7 @@ export default function OfferModal({ listing, onClose }: OfferModalProps) {
                 </div>
               )}
 
+              {errors.submit && <p className="text-xs flex items-center gap-1" style={{ color: 'var(--error)' }}><AlertCircle size={12} />{errors.submit}</p>}
               <button onClick={handleSubmit} disabled={submitting} className="btn-primary w-full py-3 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                 {submitting ? <Loader2 size={18} className="animate-spin" /> : null}
                 Submit Offer
