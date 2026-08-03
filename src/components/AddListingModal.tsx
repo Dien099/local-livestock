@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
-import { X, Package, AlertCircle, Plus, Loader2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Package, AlertCircle, Plus, Loader2, Image as ImageIcon, Upload, Link2 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
+import { supabase } from '@/lib/supabase';
 import RegionProvinceSelector from '@/components/RegionProvinceSelector';
+import { getCategoryImage } from '@/data/mockData';
 
 interface AddListingModalProps {
   open: boolean;
@@ -24,6 +26,13 @@ export default function AddListingModal({ open, onClose }: AddListingModalProps)
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // Image upload state
+  const [imageMode, setImageMode] = useState<'category' | 'url' | 'upload'>('category');
+  const [imageUrl, setImageUrl] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const allCategories = categories;
 
   useEffect(() => {
@@ -41,10 +50,45 @@ export default function AddListingModal({ open, onClose }: AddListingModalProps)
       setErrors({});
       setDone(false);
       setSubmitting(false);
+      setImageMode('category');
+      setImageUrl('');
+      setImageFile(null);
+      setImagePreview(null);
     }
   }, [open, currentUser]);
 
+  // Generate preview when file changes
+  useEffect(() => {
+    if (imageFile) {
+      const url = URL.createObjectURL(imageFile);
+      setImagePreview(url);
+      return () => URL.revokeObjectURL(url);
+    } else {
+      setImagePreview(null);
+    }
+  }, [imageFile]);
+
   if (!open || !currentUser) return null;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setErrors({ image: 'Image must be under 5MB' });
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setErrors({ image: 'Please select an image file' });
+      return;
+    }
+    setErrors({});
+    setImageFile(file);
+  };
+
+  const resolvedPreview =
+    imageMode === 'upload' ? imagePreview :
+    imageMode === 'url' && imageUrl ? imageUrl :
+    getCategoryImage(category);
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
@@ -58,6 +102,8 @@ export default function AddListingModal({ open, onClose }: AddListingModalProps)
     if (!province) e.province = 'Province is required';
     if (!municipality.trim()) e.municipality = 'Municipality is required';
     if (!description.trim()) e.description = 'Description is required';
+    if (imageMode === 'url' && !imageUrl.trim()) e.image = 'Please enter an image URL';
+    if (imageMode === 'upload' && !imageFile) e.image = 'Please select an image to upload';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -71,6 +117,29 @@ export default function AddListingModal({ open, onClose }: AddListingModalProps)
     if (isCustom) {
       await addCustomCategory(finalCategory);
     }
+
+    let finalImageUrl: string;
+    if (imageMode === 'url') {
+      finalImageUrl = imageUrl.trim();
+    } else if (imageMode === 'upload' && imageFile) {
+      const ext = imageFile.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileName = `${currentUser.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('listing-images')
+        .upload(fileName, imageFile, { upsert: false });
+      if (uploadError) {
+        setErrors({ submit: uploadError.message });
+        setSubmitting(false);
+        return;
+      }
+      const { data: { publicUrl } } = supabase.storage
+        .from('listing-images')
+        .getPublicUrl(fileName);
+      finalImageUrl = publicUrl;
+    } else {
+      finalImageUrl = getCategoryImage(finalCategory);
+    }
+
     const { error } = await createListing({
       title: title.trim(),
       category: finalCategory,
@@ -80,6 +149,7 @@ export default function AddListingModal({ open, onClose }: AddListingModalProps)
       province,
       municipality: municipality.trim(),
       description: description.trim(),
+      imageUrl: finalImageUrl,
     });
     setSubmitting(false);
     if (error) {
@@ -108,7 +178,7 @@ export default function AddListingModal({ open, onClose }: AddListingModalProps)
           </div>
         ) : (
           <>
-            <div className="sticky top-0 flex items-center justify-between p-4 border-b" style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)' }}>
+            <div className="sticky top-0 flex items-center justify-between p-4 border-b z-10" style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)' }}>
               <h2 className="text-lg font-bold" style={{ color: 'var(--text)' }}>Add New Livestock Batch</h2>
               <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ color: 'var(--text-muted)' }}>
                 <X size={20} />
@@ -116,6 +186,78 @@ export default function AddListingModal({ open, onClose }: AddListingModalProps)
             </div>
 
             <div className="p-4 space-y-4">
+              {/* Image upload section */}
+              <div>
+                <label className="text-xs font-medium mb-2 block" style={{ color: 'var(--text-muted)' }}>Batch Image</label>
+                <div className="flex gap-1.5 mb-2">
+                  <button
+                    onClick={() => setImageMode('category')}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                    style={imageMode === 'category' ? { backgroundColor: 'var(--primary)', color: 'white' } : { border: '1px solid var(--border)', color: 'var(--text)' }}
+                  >
+                    <ImageIcon size={12} className="inline mr-1" /> Category Default
+                  </button>
+                  <button
+                    onClick={() => setImageMode('url')}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                    style={imageMode === 'url' ? { backgroundColor: 'var(--primary)', color: 'white' } : { border: '1px solid var(--border)', color: 'var(--text)' }}
+                  >
+                    <Link2 size={12} className="inline mr-1" /> Image URL
+                  </button>
+                  <button
+                    onClick={() => setImageMode('upload')}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                    style={imageMode === 'upload' ? { backgroundColor: 'var(--primary)', color: 'white' } : { border: '1px solid var(--border)', color: 'var(--text)' }}
+                  >
+                    <Upload size={12} className="inline mr-1" /> Upload
+                  </button>
+                </div>
+
+                {/* Preview */}
+                <div className="w-full aspect-[16/10] rounded-xl overflow-hidden mb-2" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg)' }}>
+                  {resolvedPreview ? (
+                    <img src={resolvedPreview} alt="Batch preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center" style={{ color: 'var(--text-muted)' }}>
+                      <ImageIcon size={32} />
+                    </div>
+                  )}
+                </div>
+
+                {imageMode === 'url' && (
+                  <input
+                    type="url"
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    placeholder="https://example.com/livestock-photo/batch.jpg"
+                    className="input-field"
+                  />
+                )}
+                {imageMode === 'upload' && (
+                  <div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="btn-ghost w-full py-2.5 flex items-center justify-center gap-2 text-sm"
+                    >
+                      <Upload size={16} /> {imageFile ? 'Change Image' : 'Choose Image'}
+                    </button>
+                    {imageFile && (
+                      <p className="text-xs mt-1 text-center" style={{ color: 'var(--text-muted)' }}>
+                        {imageFile.name} ({(imageFile.size / 1024).toFixed(0)} KB)
+                      </p>
+                    )}
+                  </div>
+                )}
+                {errors.image && <p className="text-xs mt-1 flex items-center gap-1" style={{ color: 'var(--error)' }}><AlertCircle size={12} />{errors.image}</p>}
+              </div>
+
               <div>
                 <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--text-muted)' }}>Batch Title</label>
                 <input
@@ -237,6 +379,7 @@ export default function AddListingModal({ open, onClose }: AddListingModalProps)
                 {errors.description && <p className="text-xs mt-1 flex items-center gap-1" style={{ color: 'var(--error)' }}><AlertCircle size={12} />{errors.description}</p>}
               </div>
 
+              {errors.submit && <p className="text-xs flex items-center gap-1" style={{ color: 'var(--error)' }}><AlertCircle size={12} />{errors.submit}</p>}
               <button onClick={handleSubmit} disabled={submitting} className="btn-primary w-full py-3 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                 {submitting && <Loader2 size={18} className="animate-spin" />}
                 Publish Listing

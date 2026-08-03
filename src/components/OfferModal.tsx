@@ -349,7 +349,6 @@ export default function OfferModal({ listing, onClose }: OfferModalProps) {
                   <input
                     type="number"
                     min={1}
-                    max={listing.availableStock}
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
                     onBlur={() => { if (quantity === '' || qtyNum < 1) setQuantity('1'); if (qtyNum > listing.availableStock) setQuantity(String(listing.availableStock)); }}

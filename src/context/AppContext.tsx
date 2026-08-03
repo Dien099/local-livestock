@@ -43,6 +43,7 @@ interface ListingParams {
   province: string;
   municipality: string;
   description: string;
+  imageUrl?: string;
 }
 
 interface ReviewParams {
@@ -350,7 +351,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       province: params.province,
       municipality: params.municipality,
       description: params.description,
-      image_url: getCategoryImage(params.category),
+      image_url: params.imageUrl || getCategoryImage(params.category),
       is_active: true,
     });
     if (error) return { error: error.message };
